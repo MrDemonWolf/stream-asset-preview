@@ -1,0 +1,114 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* Self-hosted (bundled) fonts — no runtime CDN fetch. */
+@import "@fontsource-variable/bricolage-grotesque";
+@import "@fontsource-variable/jetbrains-mono";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+  Stream Asset Previewer — "broadcast console" aesthetic.
+  Twitch-dark canvas (#0e0e10) with a single decisive purple accent (#9147ff).
+  Display: Bricolage Grotesque. Numerics / codes: JetBrains Mono.
+*/
+:root {
+  --radius: 0.625rem;
+
+  --background: #0e0e10;
+  --foreground: #efeff1;
+
+  --card: #18181b;
+  --card-foreground: #efeff1;
+
+  --popover: #18181b;
+  --popover-foreground: #efeff1;
+
+  --primary: #9147ff;
+  --primary-foreground: #ffffff;
+
+  --secondary: #1f1f23;
+  --secondary-foreground: #efeff1;
+
+  --muted: #1f1f23;
+  --muted-foreground: #adadb8;
+
+  --accent: #26262c;
+  --accent-foreground: #efeff1;
+
+  --destructive: #f5424f;
+
+  --border: #2a2a31;
+  --input: #2a2a31;
+  --ring: #9147ff;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --font-display: "Bricolage Grotesque Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+  --font-sans: "Bricolage Grotesque Variable", ui-sans-serif, system-ui, sans-serif;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+    outline-color: color-mix(in srgb, var(--ring) 50%, transparent);
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    /* subtle purple glow bleeding from the top — atmosphere, not a flat fill */
+    background-image:
+      radial-gradient(
+        1200px 480px at 50% -10%,
+        color-mix(in srgb, var(--primary) 16%, transparent),
+        transparent 70%
+      );
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* checkerboard so transparent asset edges are legible at every size */
+  .checker {
+    background-color: #0a0a0b;
+    background-image:
+      linear-gradient(45deg, #16161a 25%, transparent 25%),
+      linear-gradient(-45deg, #16161a 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #16161a 75%),
+      linear-gradient(-45deg, transparent 75%, #16161a 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  }
+
+  /* keep pixel art crisp when scaling small badge/emote sources up */
+  .pixelated {
+    image-rendering: pixelated;
+  }
+}

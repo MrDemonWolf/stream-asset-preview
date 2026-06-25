@@ -1,0 +1,32 @@
+{
+  "name": "stream-asset-preview",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Preview Twitch-style badges and emotes at their real broadcast sizes.",
+  "scripts": {
+    "manifest": "node scripts/gen-manifest.mjs",
+    "dev": "npm run manifest && vite",
+    "build": "npm run manifest && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@fontsource-variable/bricolage-grotesque": "^5.1.1",
+    "@fontsource-variable/jetbrains-mono": "^5.1.2",
+    "@radix-ui/react-slot": "^1.1.1",
+    "@radix-ui/react-tabs": "^1.1.2",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.469.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "tailwind-merge": "^2.6.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tailwindcss": "^4.0.0",
+    "tw-animate-css": "^1.2.5",
+    "vite": "^6.0.7"
+  }
+}
