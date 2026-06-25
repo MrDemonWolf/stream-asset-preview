@@ -35,8 +35,8 @@ function square(img, size) {
   return canvas;
 }
 
-// Returns { name, files: { "<size>": dataURL }, single } — the same shape the
-// rest of the app consumes, so AssetCard / ChatPreview render it unchanged.
+// Returns { name, files: { "<size>": dataURL }, single, source } so the preview
+// can render every size and flag anything that violates Twitch's specs.
 export async function resizeSet(file, sizes) {
   const img = await loadImage(file);
   const files = {};
@@ -45,6 +45,12 @@ export async function resizeSet(file, sizes) {
     name: file.name.replace(/\.[^.]+$/, ""),
     files,
     single: files[String(Math.max(...sizes))],
+    source: {
+      width: img.naturalWidth,
+      height: img.naturalHeight,
+      bytes: file.size,
+      type: file.type,
+    },
   };
 }
 
