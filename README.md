@@ -1,76 +1,66 @@
-# Stream Asset Previewer - Badges & Emotes at Every Broadcast Size
+# Stream Asset Previewer - Resize Twitch Badges & Emotes
 
-Stream Asset Previewer is a static web tool for previewing Twitch-style
-chat badges and emotes at the exact pixel sizes they ship at. It auto-scans
-the served `badges/` and `emotes/` folders, or lets you drag a folder
-straight into the browser - nothing is ever uploaded. Built for streamers
-and channel designers checking how their art holds up small.
+Stream Asset Previewer is a single-page browser tool for prepping Twitch
+chat badges and event/sub badges and emotes. Drop one image at any size and
+it auto-resizes to Twitch's exact specs, flags anything that breaks the
+rules, previews it in a real chat line, and hands you download-ready PNGs.
+Nothing is ever uploaded - it all runs in your browser.
 
-See it crisp before it ever hits chat.
+Design it once. Ship every size.
 
 ## Features
 
-- **Real broadcast sizes** - badges render at 18 / 36 / 72px and emotes at
-  28 / 56 / 112px, side by side, so you judge legibility at the size viewers
-  actually see.
-- **Tabbed browsing** - separate Badges and Emotes tabs, each with a live
-  count.
-- **Live search** - filter by asset name or emote code as you type.
-- **Auto-scan** - a build-time manifest lists every asset, so the deployed
-  site loads your committed art automatically.
-- **Drag-and-drop fallback** - drop a folder (or pick one) to preview local
-  assets with no server and no upload; files stay in your browser.
-- **Copy to clipboard** - one click copies a badge name or emote code.
-- **Transparency-aware** - a checkerboard backing keeps transparent edges
-  legible at every size.
+- **Badge or emote** - one toggle switches the target spec and preview.
+- **Any size in, Twitch sizes out** - badges export 18 / 36 / 72 plus a
+  120px upload file; emotes export 28 / 56 / 112. Resized on an HTML canvas.
+- **Spec warnings** - flags non-square sources, upscaling, animated badges,
+  and files over Twitch's limit (25KB per badge, 1MB per emote).
+- **File weight per size** - every generated PNG shows its KB so you stay
+  under the cap.
+- **Live chat preview** - see the badge beside a username or the emote inline
+  in a mock Twitch chat, with editable channel, username, color, and message.
+- **One-click download** - per size or download all.
+- **Guided next steps** - an in-app checklist walks you through the Twitch
+  Creator Dashboard upload flow.
+- **100% client-side** - no upload, no sign-up, no backend.
 
 ## Getting Started
 
-1. Clone the repository and install dependencies (see Development below).
-2. Drop your art under `public/badges/<name>/<size>.png` and
-   `public/emotes/<code>/<size>.png`.
-3. Run `npm run dev` and open the local URL.
-4. Or skip setup entirely and drag a folder of assets onto the page.
+1. Open the live tool: <https://mrdemonwolf.github.io/stream-asset-preview/>
+2. Pick **Badge** or **Emote**.
+3. Drop in an image (any size, square recommended).
+4. Review the generated sizes and any warnings, then download.
+5. Follow the **Next steps** panel to upload on Twitch.
 
 ## Usage
 
-Assets follow a simple folder convention:
+| Step            | What happens                                              |
+| --------------- | --------------------------------------------------------- |
+| Choose type     | Badge (18/36/72 + 120 upload) or Emote (28/56/112)        |
+| Drop an image   | Auto-resized on canvas to the spec, letterboxed if needed |
+| Read warnings   | Non-square, upscaled, animated, or over the size cap      |
+| Download        | Per size, or "Download all"                               |
+| Tweak the chat  | Edit channel / username / name color / message            |
+| Ship it         | Follow the in-app steps to the Twitch dashboard           |
 
-```text
-public/
-  badges/
-    moderator/
-      18.png
-      36.png
-      72.png
-  emotes/
-    wolfHype/
-      28.png
-      56.png
-      112.png
-    pogChamp.png        # a single file is auto-scaled to all sizes
-```
+Twitch specs this tool targets:
 
-| Action            | How                                                      |
-| ----------------- | ------------------------------------------------------- |
-| Preview committed | Run the app while served; assets load from the manifest |
-| Preview local     | Drag a folder onto the page, or use "Choose folder"     |
-| Filter            | Type a name or code into the search box                 |
-| Copy a name       | Click "Copy" on any card                                |
-
-Live site: <https://mrdemonwolf.github.io/stream-asset-preview/>
+- **Event / sub badge**: one square, non-animated PNG, at least 120×120, under
+  25KB. Twitch generates the 18 / 36 / 72 chat sizes.
+- **Emote**: square PNG, transparent, under 1MB, at 28 / 56 / 112.
 
 ## Tech Stack
 
-| Layer     | Technology                          |
-| --------- | ----------------------------------- |
-| Framework | React 19                            |
-| Build     | Vite 6                              |
-| Styling   | Tailwind CSS v4                     |
-| Components| shadcn/ui (new-york), Radix UI      |
-| Icons     | lucide-react                        |
-| Fonts     | Bricolage Grotesque, JetBrains Mono |
-| Hosting   | GitHub Pages (GitHub Actions)       |
+| Layer      | Technology                          |
+| ---------- | ----------------------------------- |
+| Framework  | React 19                            |
+| Build      | Vite 6                              |
+| Styling    | Tailwind CSS v4                     |
+| Components | shadcn/ui (new-york), Radix UI      |
+| Resizing   | HTML Canvas API                     |
+| Icons      | lucide-react                        |
+| Fonts      | Bricolage Grotesque, JetBrains Mono |
+| Hosting    | GitHub Pages (GitHub Actions)       |
 
 ## Development
 
@@ -102,33 +92,31 @@ Live site: <https://mrdemonwolf.github.io/stream-asset-preview/>
 
 ### Development Scripts
 
-- `npm run dev` - regenerate the asset manifest and start Vite in dev mode.
-- `npm run build` - regenerate the manifest and build the static site to `dist/`.
+- `npm run dev` - start Vite in dev mode.
+- `npm run build` - build the static site to `dist/`.
 - `npm run preview` - serve the production build locally.
-- `npm run manifest` - scan `public/badges` and `public/emotes` and write
-  `public/manifest.json`.
+- `node scripts/gen-og.mjs` - regenerate the 1200×630 social card
+  (`public/og.png`); only needed if the brand mark changes.
 
 ### Code Quality
 
 - No runtime CDN dependencies - React, Tailwind, and fonts are all bundled.
+- Raster-only image intake (SVG rejected) to avoid canvas tainting.
 - Pure static output deployable to any static host.
-- Single shared `AssetCard` renders both badges and emotes.
 
 ## Project Structure
 
 ```text
 stream-asset-preview/
 ├── .github/workflows/   # GitHub Pages deploy workflow
-├── public/              # static assets scanned into the manifest
-│   ├── badges/          # badges/<name>/<size>.png
-│   └── emotes/          # emotes/<code>/<size>.png
-├── scripts/             # gen-manifest.mjs (build-time auto-scan)
+├── public/              # favicon, og.png, robots.txt, sitemap.xml
+├── scripts/             # gen-og.mjs (one-shot social card)
 ├── src/
-│   ├── components/      # AssetCard, DropZone, ui/ (shadcn primitives)
-│   ├── lib/             # loadAssets, clipboard, utils
-│   ├── App.jsx          # tabs, search, data sources
+│   ├── components/      # ChatPreview, ui/ (shadcn primitives)
+│   ├── lib/             # resize (canvas), utils
+│   ├── App.jsx          # the single-page tool
 │   └── index.css        # Tailwind theme + brand tokens
-├── index.html
+├── index.html           # SEO meta, Open Graph, JSON-LD
 └── vite.config.js       # base path + React/Tailwind plugins
 ```
 
