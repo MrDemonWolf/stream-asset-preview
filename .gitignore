@@ -2,6 +2,3 @@ node_modules
 dist
 .DS_Store
 *.local
-
-# regenerated each build by scripts/gen-manifest.mjs
-public/manifest.json

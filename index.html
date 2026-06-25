@@ -2,13 +2,58 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/stream-asset-preview/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/stream-asset-preview/favicon.svg" />
+    <meta name="theme-color" content="#0e0e10" />
+
+    <!-- Primary SEO -->
+    <title>Stream Asset Previewer — Resize Twitch Badges & Emotes</title>
     <meta
       name="description"
-      content="Preview Twitch-style badges and emotes at their real broadcast sizes — 18/36/72 and 28/56/112 — with live search and drag-and-drop."
+      content="Free browser tool to resize a Twitch badge or emote to every required size (18/36/72 and 28/56/112 px), preview it in a real chat line, and download. No upload, no sign-up."
     />
-    <title>Stream Asset Previewer</title>
+    <link rel="canonical" href="https://mrdemonwolf.github.io/stream-asset-preview/" />
+    <meta name="robots" content="index, follow" />
+    <meta name="author" content="MrDemonWolf, Inc." />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Stream Asset Previewer" />
+    <meta property="og:title" content="Stream Asset Previewer — Resize Twitch Badges & Emotes" />
+    <meta
+      property="og:description"
+      content="Drop one image, get every Twitch badge/emote size, preview it in chat, and download. Runs entirely in your browser."
+    />
+    <meta property="og:url" content="https://mrdemonwolf.github.io/stream-asset-preview/" />
+    <meta property="og:image" content="https://mrdemonwolf.github.io/stream-asset-preview/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="Stream Asset Previewer" />
+
+    <!-- Twitter / X (falls back to Open Graph for the rest) -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Stream Asset Previewer — Resize Twitch Badges & Emotes" />
+    <meta
+      name="twitter:description"
+      content="Drop one image, get every Twitch badge/emote size, preview it in chat, and download. Runs entirely in your browser."
+    />
+    <meta name="twitter:image" content="https://mrdemonwolf.github.io/stream-asset-preview/og.png" />
+
+    <!-- Structured data -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Stream Asset Previewer",
+        "url": "https://mrdemonwolf.github.io/stream-asset-preview/",
+        "description": "Resize a Twitch badge or emote to every required size, preview it in a chat line, and download. Runs entirely in the browser.",
+        "applicationCategory": "MultimediaApplication",
+        "operatingSystem": "Any",
+        "browserRequirements": "Requires JavaScript",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "author": { "@type": "Organization", "name": "MrDemonWolf, Inc.", "url": "https://www.mrdemonwolf.com" }
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>
