@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { Radio, Search, Sparkles } from "lucide-react";
+import { MessageSquare, Radio, Search, Sparkles } from "lucide-react";
 
 import { AssetCard } from "@/components/AssetCard";
+import { ChatStudio } from "@/components/ChatStudio";
 import { DropZone } from "@/components/DropZone";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -14,11 +15,12 @@ const EMOTE_SIZES = [28, 56, 112];
 export default function App() {
   const [data, setData] = useState({ badges: [], emotes: [] });
   const [source, setSource] = useState(null); // "scan" | "local" | null
+  const [tab, setTab] = useState("badges");
   const [query, setQuery] = useState("");
   const { copied, copy } = useCopy();
 
   // Auto-scan the built manifest on load. No manifest / empty = silent; the
-  // drop zone is always available as a fallback.
+  // drop zone and Chat Studio are always available regardless.
   useEffect(() => {
     loadFromManifest()
       .then((d) => {
@@ -40,6 +42,7 @@ export default function App() {
   }, [data, query]);
 
   const hasAny = data.badges.length > 0 || data.emotes.length > 0;
+  const showSearch = tab !== "chat";
 
   function onLoad(parsed) {
     setData(parsed);
@@ -62,8 +65,8 @@ export default function App() {
         </h1>
         <p className="mt-3 max-w-xl text-sm text-muted-foreground">
           See each asset rendered at the exact pixel sizes Twitch ships them.
-          Auto-scans the served folders, or drop a folder to preview locally —
-          nothing leaves your browser.
+          Auto-scans the served folders, drop a folder to preview locally, or
+          upload a custom badge/emote in Chat Studio — nothing leaves your browser.
         </p>
         {source && (
           <p className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1 font-mono text-[11px] text-muted-foreground">
@@ -75,20 +78,21 @@ export default function App() {
         )}
       </header>
 
-      {!hasAny ? (
-        <DropZone onLoad={onLoad} />
-      ) : (
-        <Tabs defaultValue="badges">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <TabsList>
-              <TabsTrigger value="badges">
-                Badges <span className="ml-1 font-mono text-xs opacity-60">{data.badges.length}</span>
-              </TabsTrigger>
-              <TabsTrigger value="emotes">
-                Emotes <span className="ml-1 font-mono text-xs opacity-60">{data.emotes.length}</span>
-              </TabsTrigger>
-            </TabsList>
+      <Tabs value={tab} onValueChange={setTab}>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <TabsList>
+            <TabsTrigger value="badges">
+              Badges <span className="ml-1 font-mono text-xs opacity-60">{data.badges.length}</span>
+            </TabsTrigger>
+            <TabsTrigger value="emotes">
+              Emotes <span className="ml-1 font-mono text-xs opacity-60">{data.emotes.length}</span>
+            </TabsTrigger>
+            <TabsTrigger value="chat">
+              <MessageSquare /> Chat Studio
+            </TabsTrigger>
+          </TabsList>
 
+          {showSearch && (
             <div className="relative w-full sm:max-w-xs">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -99,49 +103,51 @@ export default function App() {
                 aria-label="Filter assets by name"
               />
             </div>
-          </div>
+          )}
+        </div>
 
-          <TabsContent value="badges" className="mt-6">
-            <Grid
-              items={filtered.badges}
-              empty="No badges match that filter."
-              render={(b) => (
-                <AssetCard
-                  key={b.name}
-                  asset={b}
-                  label="Badge"
-                  name={b.name}
-                  sizes={BADGE_SIZES}
-                  onCopy={copy}
-                  copied={copied}
-                />
-              )}
-            />
-          </TabsContent>
+        <TabsContent value="badges" className="mt-6">
+          {hasAny ? (
+            <>
+              <Grid
+                items={filtered.badges}
+                empty="No badges match that filter."
+                render={(b) => (
+                  <AssetCard key={b.name} asset={b} label="Badge" name={b.name} sizes={BADGE_SIZES} onCopy={copy} copied={copied} />
+                )}
+              />
+              <div className="mt-10">
+                <DropZone onLoad={onLoad} compact />
+              </div>
+            </>
+          ) : (
+            <DropZone onLoad={onLoad} />
+          )}
+        </TabsContent>
 
-          <TabsContent value="emotes" className="mt-6">
-            <Grid
-              items={filtered.emotes}
-              empty="No emotes match that filter."
-              render={(e) => (
-                <AssetCard
-                  key={e.code}
-                  asset={e}
-                  label="Emote code"
-                  name={e.code}
-                  sizes={EMOTE_SIZES}
-                  onCopy={copy}
-                  copied={copied}
-                />
-              )}
-            />
-          </TabsContent>
+        <TabsContent value="emotes" className="mt-6">
+          {hasAny ? (
+            <>
+              <Grid
+                items={filtered.emotes}
+                empty="No emotes match that filter."
+                render={(e) => (
+                  <AssetCard key={e.code} asset={e} label="Emote code" name={e.code} sizes={EMOTE_SIZES} onCopy={copy} copied={copied} />
+                )}
+              />
+              <div className="mt-10">
+                <DropZone onLoad={onLoad} compact />
+              </div>
+            </>
+          ) : (
+            <DropZone onLoad={onLoad} />
+          )}
+        </TabsContent>
 
-          <div className="mt-10">
-            <DropZone onLoad={onLoad} compact />
-          </div>
-        </Tabs>
-      )}
+        <TabsContent value="chat" className="mt-6">
+          <ChatStudio />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
