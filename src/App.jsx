@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, Download, ImagePlus, Radio, RotateCcw } from "lucide-react";
+import { AlertTriangle, Download, ExternalLink, ImagePlus, ListChecks, Radio, RotateCcw } from "lucide-react";
 
 import { ChatPreview } from "@/components/ChatPreview";
 import { Button } from "@/components/ui/button";
@@ -8,17 +8,26 @@ import { downloadDataUrl, resizeSet } from "@/lib/resize";
 import { cn } from "@/lib/utils";
 
 // Twitch's published asset specs — the sizes and limits this tool resizes to.
+// `upload` is the file you actually hand Twitch; `chat` is the size shown in the
+// chat preview. `maxBytes` is the per-file cap Twitch enforces on upload.
 const SPECS = {
   badge: {
     label: "Badge",
-    sizes: [18, 36, 72],
+    // Twitch's Create Event badge upload wants one ≥120×120 square; it generates
+    // the 18/36/72 chat sizes itself. We export all four so you can preview chat
+    // and grab the 120 for upload.
+    sizes: [18, 36, 72, 120],
+    upload: "120",
     chat: "18",
-    note: "Chat badges: 18 / 36 / 72px PNG, transparent, square.",
+    maxBytes: 25 * 1024,
+    note: "Twitch event badge: upload one square, non-animated PNG, at least 120×120 and under 25KB. Twitch generates the 18 / 36 / 72 chat sizes from it.",
   },
   emote: {
     label: "Emote",
     sizes: [28, 56, 112],
+    upload: "112",
     chat: "28",
+    maxBytes: 1024 * 1024,
     note: "Emotes: 28 / 56 / 112px PNG, transparent, square, under 1MB each.",
   },
 };
@@ -103,7 +112,7 @@ export default function App() {
               aria-pressed={mode === key}
               onClick={() => setMode(key)}
               className={cn(
-                "rounded-md px-5 py-1.5 text-sm font-medium transition-colors",
+                "rounded-md px-5 py-1.5 text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
                 mode === key
                   ? "bg-background text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground",
@@ -147,6 +156,8 @@ export default function App() {
           )}
 
           <p className="text-xs text-muted-foreground">{spec.note}</p>
+
+          {set && <NextSteps mode={mode} spec={spec} />}
         </section>
 
         {/* Right: chat preview + controls */}
@@ -190,6 +201,45 @@ export default function App() {
   );
 }
 
+const STEPS = {
+  badge: [
+    "Download the 120px PNG above (the one tagged “Upload to Twitch”).",
+    "Creator Dashboard → Viewer Rewards → Badges → Create Event.",
+    "Upload it: square PNG, not animated, ≤25KB, at least 120×120.",
+    "Set Badge Name (≤25 chars), Subscription Count (1–5), and Badge Description.",
+    "Pick Start/End dates (≤28 days). Optionally enable a Watch Time reward with a second badge.",
+  ],
+  emote: [
+    "Download the 28 / 56 / 112px PNGs above.",
+    "Creator Dashboard → Viewer Rewards → Emotes.",
+    "Upload each tier — emotes must be square PNG, transparent, under 1MB.",
+  ],
+};
+
+function NextSteps({ mode }) {
+  return (
+    <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
+      <p className="mb-2 flex items-center gap-2 font-display text-sm font-semibold text-foreground">
+        <ListChecks className="size-4 text-primary" />
+        Next: add this to Twitch
+      </p>
+      <ol className="ml-1 list-inside list-decimal space-y-1 text-sm text-muted-foreground marker:text-primary">
+        {STEPS[mode].map((s) => (
+          <li key={s}>{s}</li>
+        ))}
+      </ol>
+      <a
+        href="https://dashboard.twitch.tv/"
+        target="_blank"
+        rel="noreferrer"
+        className="mt-3 inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+      >
+        Open Twitch Creator Dashboard <ExternalLink className="size-3.5" />
+      </a>
+    </div>
+  );
+}
+
 function Field({ label, children }) {
   return (
     <label className="block space-y-1.5">
@@ -220,7 +270,7 @@ function Uploader({ mode, spec, set, onFiles, onReplace }) {
             onFiles(e.dataTransfer.files);
           }}
           className={cn(
-            "flex w-full flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border px-6 py-14 text-center transition-colors hover:border-primary/60",
+            "flex w-full flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border px-6 py-14 text-center transition-colors hover:border-primary/60 outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring",
             over && "border-primary bg-primary/5",
           )}
         >
@@ -256,29 +306,39 @@ function Uploader({ mode, spec, set, onFiles, onReplace }) {
             </div>
           </div>
 
-          <div className="checker flex items-end justify-center gap-6 rounded-lg px-4 py-6">
-            {spec.sizes.map((size) => (
-              <div key={size} className="flex flex-col items-center gap-2">
-                <img
-                  src={set.files[String(size)]}
-                  alt={`${set.name} at ${size}px`}
-                  width={size}
-                  height={size}
-                  className="pixelated"
-                  style={{ width: size, height: size }}
-                />
-                <span className="font-mono text-[10px] text-muted-foreground">{size}px</span>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-6 px-1.5 text-[10px]"
-                  onClick={() => downloadDataUrl(set.files[String(size)], `${set.name}-${size}.png`)}
-                  aria-label={`Download ${size}px PNG`}
-                >
-                  <Download className="!size-3" /> PNG
-                </Button>
-              </div>
-            ))}
+          <div className="checker flex flex-wrap items-end justify-center gap-x-6 gap-y-4 rounded-lg px-4 py-6">
+            {spec.sizes.map((size) => {
+              const isUpload = String(size) === spec.upload;
+              return (
+                <div key={size} className="flex flex-col items-center gap-1.5">
+                  <img
+                    src={set.files[String(size)]}
+                    alt={`${set.name} at ${size}px`}
+                    width={size}
+                    height={size}
+                    className="pixelated"
+                    style={{ width: size, height: size }}
+                  />
+                  <span className="font-mono text-[10px] text-muted-foreground">
+                    {size}px · {fmtBytes(bytesOfDataUrl(set.files[String(size)]))}
+                  </span>
+                  {isUpload && (
+                    <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-primary">
+                      Upload to Twitch
+                    </span>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="h-6 px-1.5 text-[10px]"
+                    onClick={() => downloadDataUrl(set.files[String(size)], `${set.name}-${size}.png`)}
+                    aria-label={`Download ${size}px PNG`}
+                  >
+                    <Download className="!size-3" /> PNG
+                  </Button>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -296,17 +356,30 @@ function Uploader({ mode, spec, set, onFiles, onReplace }) {
 
 function specWarnings(set, spec) {
   const out = [];
-  const { width, height, bytes, type } = set.source;
+  const { width, height, type } = set.source;
   const largest = Math.max(...spec.sizes);
   if (width !== height) out.push(`Source isn't square (${width}×${height}). Twitch assets must be square — it's been letterboxed into transparent padding.`);
   if (Math.min(width, height) < largest) out.push(`Source is smaller than ${largest}px, so the largest size is upscaled and may look soft. Design at ${largest}px or larger.`);
-  if (bytes > 1_000_000) out.push(`Source is ${fmtBytes(bytes)} — Twitch caps each file at 1MB.`);
-  if (type && type !== "image/png") out.push(`Source is ${type || "non-PNG"}; Twitch requires PNG. Exports above are PNG.`);
+  if (spec.label === "Badge" && type === "image/gif") out.push("Event badges can't be animated. The export is a flattened static PNG — start from a still image to be safe.");
+
+  // The real gate is the upload file's size, not the source's.
+  const uploadBytes = bytesOfDataUrl(set.files[spec.upload]);
+  if (uploadBytes > spec.maxBytes) {
+    out.push(`The ${spec.upload}px PNG is ${fmtBytes(uploadBytes)} — Twitch caps ${spec.label.toLowerCase()} uploads at ${fmtBytes(spec.maxBytes)}. Simplify the art or reduce colors.`);
+  }
   return out;
+}
+
+// Approximate decoded byte length of a base64 data URL without decoding it.
+function bytesOfDataUrl(dataUrl) {
+  if (!dataUrl) return 0;
+  const b64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
+  const pad = b64.endsWith("==") ? 2 : b64.endsWith("=") ? 1 : 0;
+  return Math.floor((b64.length * 3) / 4) - pad;
 }
 
 function fmtBytes(n) {
   if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(n < 10 * 1024 ? 1 : 0)} KB`;
   return `${(n / 1024 / 1024).toFixed(2)} MB`;
 }
