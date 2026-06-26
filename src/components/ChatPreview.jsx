@@ -1,4 +1,4 @@
-import { Users } from "lucide-react";
+import { Users, Video } from "lucide-react";
 
 // A faithful-enough Twitch chat mock so you can see a custom badge sitting next
 // to the username (badge mode) or a custom emote inline in a message (emote
@@ -6,6 +6,19 @@ import { Users } from "lucide-react";
 // badge 18px, emote 28px, bold colored username.
 export function ChatPreview({ mode, channel, username, color, badgeUrl, emoteUrl, message }) {
   const name = username || "Username";
+
+  // Twitch's built-in broadcaster badge — red chip with a white camera glyph,
+  // shown next to the channel owner. The demo user is the broadcaster, so it
+  // always renders here.
+  const Broadcaster = () => (
+    <span
+      className="mr-1 inline-flex size-[18px] shrink-0 items-center justify-center rounded-[3px] bg-[#e91916] align-middle"
+      title="Broadcaster"
+      aria-label="Broadcaster"
+    >
+      <Video className="size-3 text-white" aria-hidden="true" />
+    </span>
+  );
 
   const Badge = () =>
     mode === "badge" && badgeUrl ? (
@@ -40,6 +53,7 @@ export function ChatPreview({ mode, channel, username, color, badgeUrl, emoteUrl
         </p>
 
         <div className="rounded px-1 py-0.5 hover:bg-white/5">
+          <Broadcaster />
           <Badge />
           <Name />
           {mode === "emote" && emoteUrl ? (
@@ -56,6 +70,7 @@ export function ChatPreview({ mode, channel, username, color, badgeUrl, emoteUrl
         </div>
 
         <div className="rounded px-1 py-0.5 hover:bg-white/5">
+          <Broadcaster />
           <Badge />
           <Name />
           {mode === "emote" && emoteUrl ? (
