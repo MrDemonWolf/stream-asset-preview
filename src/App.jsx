@@ -197,7 +197,49 @@ export default function App() {
           />
         </section>
       </div>
+
+      <Footer />
     </div>
+  );
+}
+
+function Footer() {
+  return (
+    <footer className="mt-16 border-t border-border pt-8 text-center text-xs text-muted-foreground">
+      <p className="mx-auto max-w-xl">
+        Not affiliated with, endorsed by, or sponsored by Twitch. Twitch is a
+        trademark of Twitch Interactive, Inc. Asset specs may change — always
+        confirm against the official{" "}
+        <a
+          href="https://help.twitch.tv/s/article/subscriber-badge-guide"
+          target="_blank"
+          rel="noreferrer"
+          className="font-medium text-foreground underline-offset-2 hover:underline"
+        >
+          Twitch guidelines
+        </a>
+        .
+      </p>
+      <nav className="mt-4 flex items-center justify-center gap-4">
+        <a href="https://www.mrdemonwolf.com" target="_blank" rel="noreferrer" className="hover:text-foreground">
+          mrdemonwolf.com
+        </a>
+        <span aria-hidden="true">·</span>
+        <a href="https://mrdwolf.net/discord" target="_blank" rel="noreferrer" className="hover:text-foreground">
+          Discord
+        </a>
+        <span aria-hidden="true">·</span>
+        <a href="https://github.com/mrdemonwolf/stream-asset-preview" target="_blank" rel="noreferrer" className="hover:text-foreground">
+          GitHub
+        </a>
+      </nav>
+      <p className="mt-4">
+        Made with love by{" "}
+        <a href="https://www.mrdemonwolf.com" target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">
+          MrDemonWolf, Inc.
+        </a>
+      </p>
+    </footer>
   );
 }
 
@@ -330,7 +372,7 @@ function Uploader({ mode, spec, set, onFiles, onReplace }) {
                   <Button
                     size="sm"
                     variant="ghost"
-                    className="h-6 px-1.5 text-[10px]"
+                    className="h-7 px-2 text-[10px]"
                     onClick={() => downloadDataUrl(set.files[String(size)], `${set.name}-${size}.png`)}
                     aria-label={`Download ${size}px PNG`}
                   >
