@@ -80,8 +80,8 @@ export default function App() {
   const warnings = set ? specWarnings(set, spec) : [];
 
   return (
-    <div className="mx-auto min-h-dvh max-w-5xl px-5 pb-24 pt-10 sm:px-8">
-      <header className="mb-8 text-center">
+    <div className="mx-auto min-h-dvh max-w-5xl px-5 pb-12 pt-8 sm:px-8">
+      <header className="mb-6 text-center">
         <div className="flex items-center justify-center gap-2 text-primary">
           <Radio className="size-4" aria-hidden="true" />
           <span className="font-mono text-xs uppercase tracking-[0.3em]">
@@ -99,7 +99,7 @@ export default function App() {
       </header>
 
       {/* Mode toggle — choose what you're making */}
-      <div className="mb-6 flex justify-center">
+      <div className="mb-5 flex justify-center">
         <div
           role="group"
           aria-label="Asset type"
