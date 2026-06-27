@@ -234,7 +234,7 @@ function Footer() {
         </a>
       </nav>
       <p className="mt-4">
-        Made with love by{" "}
+        © {new Date().getFullYear()} Made with love by{" "}
         <a href="https://www.mrdemonwolf.com" target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">
           MrDemonWolf, Inc.
         </a>
