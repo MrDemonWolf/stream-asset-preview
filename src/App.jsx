@@ -238,6 +238,19 @@ function Footer() {
         <a href="https://www.mrdemonwolf.com" target="_blank" rel="noreferrer" className="font-medium text-primary hover:underline">
           MrDemonWolf, Inc.
         </a>
+        {__COMMIT_HASH__ !== "dev" && (
+          <>
+            {" · "}
+            <a
+              href={`https://github.com/mrdemonwolf/stream-asset-preview/commit/${__COMMIT_HASH__}`}
+              target="_blank"
+              rel="noreferrer"
+              className="font-mono hover:text-foreground"
+            >
+              {__COMMIT_HASH__}
+            </a>
+          </>
+        )}
       </p>
     </footer>
   );
