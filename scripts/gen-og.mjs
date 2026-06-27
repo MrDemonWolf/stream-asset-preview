@@ -37,6 +37,27 @@ function roundRect(x0, y0, w, h, rad, c) {
 function circle(cx, cy, r, c) {
   for (let y = -r; y <= r; y++) for (let x = -r; x <= r; x++) if (x * x + y * y <= r * r) px(cx + x, cy + y, c);
 }
+// one side of a broadcast arc ring (side>0 = right, side<0 = left), ±halfDeg span
+function arcRing(cx, cy, r, w, side, halfDeg, c) {
+  const r0 = r - w / 2, r1 = r + w / 2;
+  for (let y = Math.floor(cy - r1); y <= Math.ceil(cy + r1); y++)
+    for (let x = Math.floor(cx - r1); x <= Math.ceil(cx + r1); x++) {
+      const dx = x - cx, dy = y - cy, d = Math.hypot(dx, dy);
+      if (d < r0 || d > r1) continue;
+      const a = (Math.atan2(dy, dx) * 180) / Math.PI;
+      if (side > 0 ? Math.abs(a) <= halfDeg : Math.abs(a) >= 180 - halfDeg) px(x, y, c);
+    }
+}
+// purple tile + broadcast signal (dot + radiating arcs), like the favicon
+function badge(x, y, s) {
+  roundRect(x, y, s, s, s * 0.22, PURPLE);
+  const cx = x + s / 2, cy = y + s / 2 + s * 0.016, w = s * 0.072;
+  for (const side of [1, -1]) {
+    arcRing(cx, cy, s * 0.1875, w, side, 50, WHITE);
+    arcRing(cx, cy, s * 0.297, w, side, 50, WHITE);
+  }
+  circle(cx, cy, s * 0.081, WHITE);
+}
 
 // canvas
 rect(0, 0, W, H, BG);
@@ -47,17 +68,15 @@ for (let y = 0; y < H; y++)
     if (d < 1) px(x, y, GLOW, (1 - d) * 0.18);
   }
 
-// logo tile
-const S = 300, lx = (W - S) / 2, ly = (H - S) / 2 - 20;
-roundRect(lx, ly, S, S, 64, PURPLE);
-// eyes
-circle(lx + 110, ly + 130, 24, WHITE);
-circle(lx + 190, ly + 130, 24, WHITE);
-// mouth bar
-roundRect(lx + 95, ly + 195, 110, 26, 13, WHITE);
-
-// accent underline
-rect((W - 160) / 2, ly + S + 36, 160, 6, PURPLE);
+// hero mark + "one image → every size" progression, bottom-aligned on a baseline
+const baseline = 430;
+badge(150, baseline - 300, 300);
+const chips = [[560, 150], [760, 100], [905, 64]];
+for (const [x, s] of chips) badge(x, baseline - s, s);
+// connecting baseline rule under the chips
+rect(560, baseline + 14, 409, 4, PURPLE);
+// accent underline beneath the hero mark
+rect(150 + (300 - 160) / 2, baseline + 36, 160, 6, PURPLE);
 
 // ---- encode PNG (RGBA) ----
 const crcTable = Array.from({ length: 256 }, (_, n) => {
