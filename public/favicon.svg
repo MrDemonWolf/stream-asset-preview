@@ -1,7 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
-  <rect width="32" height="32" rx="8" fill="#0e0e10" />
-  <rect x="5" y="5" width="22" height="22" rx="6" fill="#9147ff" />
-  <circle cx="13" cy="14" r="2.4" fill="#ffffff" />
-  <circle cx="21" cy="14" r="2.4" fill="#ffffff" />
-  <path d="M11 20c1.6 2.2 8.4 2.2 10 0" fill="none" stroke="#ffffff" stroke-width="2.2" stroke-linecap="round" />
+  <defs>
+    <linearGradient id="b" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#a970ff" />
+      <stop offset="1" stop-color="#9147ff" />
+    </linearGradient>
+  </defs>
+  <rect width="32" height="32" rx="7" fill="url(#b)" />
+  <!-- broadcast signal: center dot + radiating arcs = on-air / streaming -->
+  <g fill="none" stroke="#ffffff" stroke-width="2.3" stroke-linecap="round">
+    <path d="M19.86 11.9 A6 6 0 0 1 19.86 21.1" />
+    <path d="M22.11 9.22 A9.5 9.5 0 0 1 22.11 23.78" />
+    <path d="M12.14 11.9 A6 6 0 0 0 12.14 21.1" />
+    <path d="M9.89 9.22 A9.5 9.5 0 0 0 9.89 23.78" />
+  </g>
+  <circle cx="16" cy="16.5" r="2.6" fill="#ffffff" />
 </svg>
