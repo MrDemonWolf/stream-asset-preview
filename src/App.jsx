@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Download, ExternalLink, ImagePlus, ListChecks, Radio, RotateCcw } from "lucide-react";
 
 import { ChatPreview } from "@/components/ChatPreview";
+import { Showcase } from "@/components/Showcase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { downloadDataUrl, resizeSet } from "@/lib/resize";
@@ -38,6 +39,7 @@ const ACCEPT = /\.(png|gif|jpe?g|webp)$/i;
 const ACCEPT_TYPE = /^image\/(png|gif|jpeg|webp)$/;
 
 export default function App() {
+  const [view, setView] = useState("resize");
   const [mode, setMode] = useState("badge");
   const [file, setFile] = useState(null);
   const [set, setSet] = useState(null);
@@ -88,41 +90,86 @@ export default function App() {
             Stream Asset Previewer
           </span>
         </div>
-        <h1 className="mx-auto mt-3 max-w-2xl font-display text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
-          Drop one image. Get every Twitch size.
-        </h1>
-        <p className="mx-auto mt-3 max-w-xl text-sm text-muted-foreground">
-          Upload a badge or emote at any size — it's auto-resized to Twitch's
-          exact specs, previewed in a real chat line, and ready to download.
-          Nothing leaves your browser.
-        </p>
+        {view === "resize" ? (
+          <>
+            <h1 className="mx-auto mt-3 max-w-2xl font-display text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
+              Drop one image. Get every Twitch size.
+            </h1>
+            <p className="mx-auto mt-3 max-w-xl text-sm text-muted-foreground">
+              Upload a badge or emote at any size — it's auto-resized to Twitch's
+              exact specs, previewed in a real chat line, and ready to download.
+              Nothing leaves your browser.
+            </p>
+          </>
+        ) : (
+          <>
+            <h1 className="mx-auto mt-3 max-w-2xl font-display text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
+              Build an emote showcase.
+            </h1>
+            <p className="mx-auto mt-3 max-w-xl text-sm text-muted-foreground">
+              Drop your whole set — sorted into Twitch tiers or Discord boost-level
+              slots, so you know exactly where each one uploads. Preview PNGs and
+              GIFs, then export one image to advertise the lot. Nothing leaves your
+              browser.
+            </p>
+          </>
+        )}
       </header>
 
-      {/* Mode toggle — choose what you're making */}
+      {/* Top view switcher — resizer vs. showcase organizer */}
       <div className="mb-5 flex justify-center">
-        <div
-          role="group"
-          aria-label="Asset type"
-          className="inline-flex rounded-lg bg-muted p-[3px]"
-        >
-          {Object.entries(SPECS).map(([key, s]) => (
+        <div role="group" aria-label="Tool" className="inline-flex rounded-lg bg-muted p-[3px]">
+          {[
+            ["resize", "Resize one"],
+            ["showcase", "Build a showcase"],
+          ].map(([key, text]) => (
             <button
               key={key}
               type="button"
-              aria-pressed={mode === key}
-              onClick={() => setMode(key)}
+              aria-pressed={view === key}
+              onClick={() => setView(key)}
               className={cn(
                 "rounded-md px-5 py-1.5 text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                mode === key
+                view === key
                   ? "bg-background text-foreground shadow-sm"
                   : "text-muted-foreground hover:text-foreground",
               )}
             >
-              {s.label}
+              {text}
             </button>
           ))}
         </div>
       </div>
+
+      {view === "showcase" && <Showcase />}
+
+      {view === "resize" && (
+        <>
+          {/* Mode toggle — choose what you're making */}
+          <div className="mb-5 flex justify-center">
+            <div
+              role="group"
+              aria-label="Asset type"
+              className="inline-flex rounded-lg bg-muted p-[3px]"
+            >
+              {Object.entries(SPECS).map(([key, s]) => (
+                <button
+                  key={key}
+                  type="button"
+                  aria-pressed={mode === key}
+                  onClick={() => setMode(key)}
+                  className={cn(
+                    "rounded-md px-5 py-1.5 text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    mode === key
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
 
       <div className="grid gap-8 lg:grid-cols-[1.05fr_0.95fr]">
         {/* Left: upload + generated sizes */}
@@ -197,6 +244,8 @@ export default function App() {
           />
         </section>
       </div>
+        </>
+      )}
 
       <Footer />
     </div>
