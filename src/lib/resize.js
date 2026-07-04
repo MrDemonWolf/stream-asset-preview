@@ -54,6 +54,23 @@ export async function resizeSet(file, sizes) {
   };
 }
 
+// Contain `file` into one transparent square PNG of `size` px — the showcase's
+// auto-size on upload. Returns the data URL plus its decoded byte size (for the
+// off-spec KB check) and the original dimensions.
+export async function squareDataUrl(file, size) {
+  const img = await loadImage(file);
+  const canvas = square(img, size);
+  const dataUrl = canvas.toDataURL("image/png");
+  const b64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
+  const pad = b64.endsWith("==") ? 2 : b64.endsWith("=") ? 1 : 0;
+  return {
+    dataUrl,
+    bytes: Math.floor((b64.length * 3) / 4) - pad,
+    w: img.naturalWidth,
+    h: img.naturalHeight,
+  };
+}
+
 // Trigger a download of one generated size.
 export function downloadDataUrl(dataUrl, filename) {
   const a = document.createElement("a");
