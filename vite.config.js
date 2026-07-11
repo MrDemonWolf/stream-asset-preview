@@ -22,5 +22,8 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: { "@": path.resolve(import.meta.dirname, "./src") },
+    // Force a single React instance so newly-optimized deps (e.g. Radix) can't
+    // pull a duplicate copy — that triggers "Invalid hook call".
+    dedupe: ["react", "react-dom"],
   },
 });

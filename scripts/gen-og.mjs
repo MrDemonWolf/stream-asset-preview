@@ -10,7 +10,12 @@ const W = 1200, H = 630;
 const buf = Buffer.alloc(W * H * 4);
 
 const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
-const BG = hex("#0e0e10"), PURPLE = hex("#9147ff"), WHITE = [255, 255, 255], GLOW = hex("#9147ff");
+// PURPLE = Twitch brand mark, BLURPLE = Discord — the card now covers both.
+// These are the DECORATIVE accents (--accent-twitch / --accent-discord), not the
+// darker button-fill --primary; the mark is art, so the vivid hues are correct.
+const BG = hex("#0e0e10"), PURPLE = hex("#9147ff"), BLURPLE = hex("#5865f2");
+const WHITE = [255, 255, 255], GLOW = hex("#9147ff");
+const lerp = (a, b, t) => a.map((v, i) => v + (b[i] - v) * t);
 
 function px(x, y, [r, g, b], a = 1) {
   if (x < 0 || y < 0 || x >= W || y >= H) return;
@@ -48,9 +53,17 @@ function arcRing(cx, cy, r, w, side, halfDeg, c) {
       if (side > 0 ? Math.abs(a) <= halfDeg : Math.abs(a) >= 180 - halfDeg) px(x, y, c);
     }
 }
-// purple tile + broadcast signal (dot + radiating arcs), like the favicon
-function badge(x, y, s) {
-  roundRect(x, y, s, s, s * 0.22, PURPLE);
+// A horizontal color gradient bar (per-pixel lerp c0 -> c1 across the width).
+function gradRect(x0, y0, w, h, c0, c1) {
+  for (let x = 0; x < w; x++) {
+    const c = lerp(c0, c1, x / (w - 1));
+    for (let y = 0; y < h; y++) px(x0 + x, y0 + y, c);
+  }
+}
+// Rounded tile + broadcast signal (dot + radiating arcs), like the favicon.
+// `color` lets the size-progression chips shift Twitch-purple -> Discord-blurple.
+function badge(x, y, s, color = PURPLE) {
+  roundRect(x, y, s, s, s * 0.22, color);
   const cx = x + s / 2, cy = y + s / 2 + s * 0.016, w = s * 0.072;
   for (const side of [1, -1]) {
     arcRing(cx, cy, s * 0.1875, w, side, 50, WHITE);
@@ -68,13 +81,15 @@ for (let y = 0; y < H; y++)
     if (d < 1) px(x, y, GLOW, (1 - d) * 0.18);
   }
 
-// hero mark + "one image → every size" progression, bottom-aligned on a baseline
+// Hero mark (Twitch-purple) + a shrinking chip progression that reads "one
+// image → every size" and shifts purple → blurple to say "Twitch AND Discord",
+// all bottom-aligned on a shared baseline.
 const baseline = 430;
-badge(150, baseline - 300, 300);
+badge(150, baseline - 300, 300, PURPLE);
 const chips = [[560, 150], [760, 100], [905, 64]];
-for (const [x, s] of chips) badge(x, baseline - s, s);
-// connecting baseline rule under the chips
-rect(560, baseline + 14, 409, 4, PURPLE);
+chips.forEach(([x, s], i) => badge(x, baseline - s, s, lerp(PURPLE, BLURPLE, i / (chips.length - 1))));
+// connecting baseline rule under the chips, purple → blurple to match
+gradRect(560, baseline + 14, 409, 4, PURPLE, BLURPLE);
 // accent underline beneath the hero mark
 rect(150 + (300 - 160) / 2, baseline + 36, 160, 6, PURPLE);
 

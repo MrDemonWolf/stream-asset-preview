@@ -4,7 +4,12 @@ import { Hash } from "lucide-react";
 // inline (and in a reaction), or a sticker dropped in a message — the spots that
 // actually matter. Mirrors Discord's dark theme. `kind` is "demoji" | "dsticker";
 // `url` is the highest-res crop (128 / 320) and we size it down with CSS.
-export function DiscordPreview({ kind, url, username, message }) {
+//
+// NOTE: every hex here is an intentional, locked Discord value (#313338 chat,
+// #5865f2 avatar, #949ba4 meta, etc.). Do NOT swap them for design tokens — the
+// mock exists to look exactly like Discord. Sample copy is fixed on purpose so
+// the preview reads the same regardless of the Twitch message field.
+export function DiscordPreview({ kind, url, username }) {
   const name = username || "Username";
 
   const Avatar = () => (
@@ -31,11 +36,11 @@ export function DiscordPreview({ kind, url, username, message }) {
             <NameLine />
             {kind === "demoji" ? (
               <p className="break-words">
-                {message || "this is so good"}{" "}
+                this is so good{" "}
                 {url && (
                   <img
                     src={url}
-                    alt="custom emoji"
+                    alt="Preview: your emoji inline in a Discord message"
                     className="inline-block size-[22px] align-[-0.35em]"
                   />
                 )}
@@ -45,7 +50,7 @@ export function DiscordPreview({ kind, url, username, message }) {
                 {url ? (
                   <img
                     src={url}
-                    alt="custom sticker"
+                    alt="Preview: your sticker in a Discord message"
                     width={160}
                     height={160}
                     className="rounded-[10px]"
@@ -67,7 +72,7 @@ export function DiscordPreview({ kind, url, username, message }) {
               <p className="break-words">same energy</p>
               {url && (
                 <span className="mt-1 inline-flex items-center gap-1.5 rounded-lg border border-[#4e5058] bg-[#2b2d31] px-2 py-0.5">
-                  <img src={url} alt="reaction" className="size-4" />
+                  <img src={url} alt="Preview: your emoji as a Discord reaction" className="size-4" />
                   <span className="text-xs font-semibold text-[#c9cdfb]">3</span>
                 </span>
               )}
