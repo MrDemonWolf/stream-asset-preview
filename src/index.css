@@ -5,14 +5,19 @@
 @import "@fontsource-variable/bricolage-grotesque";
 @import "@fontsource-variable/jetbrains-mono";
 
-@custom-variant dark (&:is(.dark *));
-
 /*
   Stream Asset Previewer — "broadcast console" aesthetic.
-  Twitch-dark canvas (#0e0e10) with a single decisive purple accent (#9147ff).
+  Committed dark theme (Twitch-dark canvas #0e0e10) with a decisive purple accent.
   Display: Bricolage Grotesque. Numerics / codes: JetBrains Mono.
+
+  Color roles are split so every pair clears WCAG AA (most clear AAA):
+    - a FILL purple (button surface, white text on it) — #772ce8, white 6.3:1
+    - a TEXT purple (links / markers / accent glyphs on dark) — #b39dff, 7.8:1
+  Same fill/text split for destructive. Decorative platform accents (#9147ff /
+  #5865f2) are only ever dots or rails (>=3:1 as UI, never body text).
 */
 :root {
+  color-scheme: dark;
   --radius: 0.625rem;
 
   --background: #0e0e10;
@@ -24,23 +29,36 @@
   --popover: #18181b;
   --popover-foreground: #efeff1;
 
-  --primary: #9147ff;
+  --primary: #772ce8; /* button/interactive FILL — white text = 6.3:1 (AA+) */
   --primary-foreground: #ffffff;
+  --primary-text: #b39dff; /* purple AS TEXT on dark — 7.8:1 on card (AAA) */
 
   --secondary: #1f1f23;
   --secondary-foreground: #efeff1;
 
   --muted: #1f1f23;
-  --muted-foreground: #adadb8;
+  --muted-foreground: #adadb8; /* 7.3:1 on card (AAA) */
 
   --accent: #26262c;
   --accent-foreground: #efeff1;
 
-  --destructive: #f5424f;
+  --destructive: #dc2626; /* destructive FILL — white text = 4.8:1 (AA) */
+  --destructive-foreground: #ffffff;
+  --destructive-text: #ff6b6b; /* red AS TEXT on dark — 6.4:1 on card (AA+) */
+
+  --success-text: #34d399; /* emerald — 9.2:1 on card (AAA) */
+  --warning-text: #fbbf24; /* amber — 10.6:1 on card (AAA) */
+
+  /* Platform accents: decorative dots + rails only (>=3:1 UI), never body text. */
+  --accent-twitch: #9147ff;
+  --accent-discord: #5865f2;
+  /* When a platform accent must be TEXT, use these lighter variants (AAA/AA+). */
+  --accent-twitch-text: #b39dff;
+  --accent-discord-text: #8f9bf5;
 
   --border: #2a2a31;
   --input: #2a2a31;
-  --ring: #9147ff;
+  --ring: #b39dff; /* focus ring — 7.8:1 on card, stays >=3:1 at any opacity */
 }
 
 @theme inline {
@@ -52,6 +70,7 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-primary-text: var(--primary-text);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -59,6 +78,14 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-text: var(--destructive-text);
+  --color-success-text: var(--success-text);
+  --color-warning-text: var(--warning-text);
+  --color-accent-twitch: var(--accent-twitch);
+  --color-accent-discord: var(--accent-discord);
+  --color-accent-twitch-text: var(--accent-twitch-text);
+  --color-accent-discord-text: var(--accent-discord-text);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -76,25 +103,60 @@
 @layer base {
   * {
     border-color: var(--border);
-    outline-color: color-mix(in srgb, var(--ring) 50%, transparent);
+    /* Solid lavender ring (>=3:1 on card) so the focus outline never washes out. */
+    outline-color: var(--ring);
   }
 
   body {
     background-color: var(--background);
     color: var(--foreground);
     font-family: var(--font-sans);
-    /* subtle purple glow bleeding from the top — atmosphere, not a flat fill */
+    /* subtle purple glow bleeding from the top — atmosphere, not a flat fill.
+       No fixed attachment: it forced full-page repaints and janked mobile scroll. */
     background-image:
       radial-gradient(
         1200px 480px at 50% -10%,
-        color-mix(in srgb, var(--primary) 16%, transparent),
+        color-mix(in srgb, var(--accent-twitch) 16%, transparent),
         transparent 70%
       );
     background-repeat: no-repeat;
-    background-attachment: fixed;
     -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
   }
 
+  /* Display headings lean on Bricolage's weight + optical-size axes so the
+     display voice is distinct from body copy (no second font needed). */
+  .font-display {
+    font-optical-sizing: auto;
+    letter-spacing: -0.01em;
+  }
+}
+
+@layer components {
+  /* Panel = the standard tier-1 surface. One place to tune card elevation:
+     border + a hairline top bevel + a soft ambient shadow. */
+  .panel {
+    background-color: var(--card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    box-shadow:
+      inset 0 1px 0 0 rgb(255 255 255 / 0.04),
+      0 1px 2px 0 rgb(0 0 0 / 0.4);
+  }
+
+  /* Console micro-label: 11px mono, uppercase, tracked — the chrome voice.
+     Replaces the scattered text-[10px]/[11px] uppercase spans. */
+  .u-label {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem; /* 11px */
+    line-height: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--muted-foreground);
+  }
+}
+
+@layer base {
   /* checkerboard so transparent asset edges are legible at every size */
   .checker {
     background-color: #0a0a0b;
@@ -110,5 +172,18 @@
   /* keep pixel art crisp when scaling small badge/emote sources up */
   .pixelated {
     image-rendering: pixelated;
+  }
+
+  /* Honor reduced-motion: the status ping, spinners, and press transitions
+     all collapse to near-instant (WCAG 2.2.2 / 2.3.3). */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }

@@ -13,12 +13,17 @@ const CELL = 104; // tile size
 const GAP = 14;
 const PER = Math.floor((W - M * 2 + GAP) / (CELL + GAP)); // tiles per row
 
+// Baked copy of the app's dark-theme tokens (index.css). Canvas can't read CSS
+// custom properties, so keep these in sync with :root by hand if the palette
+// moves. `over` is the "red as text on dark" token (--destructive-text), used
+// only when a section is past its slot cap.
 const COL = {
   bg: "#0e0e10",
   card: "#18181b",
   border: "#2a2a31",
   text: "#efeff1",
   muted: "#adadb8",
+  over: "#ff6b6b",
 };
 
 function rows(n) {
@@ -95,7 +100,7 @@ export async function exportShowcase({ title, subtitle, accent, blocks }, filena
     ctx.fillText(block.label, M, y + 20);
 
     const count = block.cap == null ? `${block.items.length}` : `${block.items.length} / ${block.cap}`;
-    ctx.fillStyle = block.cap != null && block.items.length > block.cap ? "#f5424f" : COL.muted;
+    ctx.fillStyle = block.cap != null && block.items.length > block.cap ? COL.over : COL.muted;
     ctx.font = '500 16px "JetBrains Mono Variable", ui-monospace, monospace';
     ctx.textAlign = "right";
     ctx.fillText(count, W - M, y + 19);

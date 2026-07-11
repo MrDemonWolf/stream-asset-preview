@@ -1,6 +1,12 @@
-// Client-side downscale: upload one high-res source, get the exact sizes
-// Twitch wants. Badges ship 18/36/72, emotes 28/56/112 — you design at the
-// largest and this generates the rest. Canvas only, no deps.
+// Canvas image ops shared by both tools — everything happens in the browser,
+// no uploads, no deps. Two jobs live here:
+//   1. The interactive crop model used by the Crop view: a square { x, y, size }
+//      window over the source (see the block comment further down) that
+//      cropToDataUrl() rasterizes to each platform size (Twitch 18/36/72/120 &
+//      28/56/112, Discord 48/128 & 160/320).
+//   2. squareDataUrl(): the Showcase's "auto-size on drop" — contain the whole
+//      image into one transparent square, no cropping.
+// All output is PNG; animation is intentionally dropped (callers warn on GIF).
 
 export function loadImage(file) {
   return new Promise((resolve, reject) => {
@@ -19,7 +25,9 @@ export function loadImage(file) {
   });
 }
 
-// Draw `img` centered+contained into a transparent square of `size` px.
+// Draw `img` centered + contained (letterboxed) into a transparent square of
+// `size` px. High-quality smoothing since we're always downscaling from a
+// larger source. Shared by squareDataUrl below.
 function square(img, size) {
   const canvas = document.createElement("canvas");
   canvas.width = size;
@@ -33,25 +41,6 @@ function square(img, size) {
   const h = img.height * scale;
   ctx.drawImage(img, (size - w) / 2, (size - h) / 2, w, h);
   return canvas;
-}
-
-// Returns { name, files: { "<size>": dataURL }, single, source } so the preview
-// can render every size and flag anything that violates Twitch's specs.
-export async function resizeSet(file, sizes) {
-  const img = await loadImage(file);
-  const files = {};
-  for (const size of sizes) files[String(size)] = square(img, size).toDataURL("image/png");
-  return {
-    name: file.name.replace(/\.[^.]+$/, ""),
-    files,
-    single: files[String(Math.max(...sizes))],
-    source: {
-      width: img.naturalWidth,
-      height: img.naturalHeight,
-      bytes: file.size,
-      type: file.type,
-    },
-  };
 }
 
 // Contain `file` into one transparent square PNG of `size` px — the showcase's

@@ -4,6 +4,10 @@ import { Users, Video } from "lucide-react";
 // to the username (badge mode) or a custom emote inline in a message (emote
 // mode) — the two spots that actually matter. Mirrors Twitch's dark chat:
 // badge 18px, emote 28px, bold colored username.
+//
+// NOTE: every hex in this component is an intentional, locked Twitch value
+// (chat #18181b, broadcaster chip #e91916, meta grey #adadb8). Do NOT replace
+// them with design tokens — the whole point is to look exactly like Twitch.
 export function ChatPreview({ mode, channel, username, color, badgeUrl, emoteUrl, message }) {
   const name = username || "Username";
 
@@ -24,7 +28,7 @@ export function ChatPreview({ mode, channel, username, color, badgeUrl, emoteUrl
     mode === "badge" && badgeUrl ? (
       <img
         src={badgeUrl}
-        alt={`${name}'s badge`}
+        alt={`Preview: your badge beside ${name} in Twitch chat`}
         width={18}
         height={18}
         className="pixelated mr-1 inline-block size-[18px] shrink-0 rounded-[3px] align-middle"
@@ -59,7 +63,7 @@ export function ChatPreview({ mode, channel, username, color, badgeUrl, emoteUrl
           {mode === "emote" && emoteUrl ? (
             <img
               src={emoteUrl}
-              alt="custom emote"
+              alt="Preview: your emote inline in a Twitch message"
               width={28}
               height={28}
               className="pixelated inline-block size-7 align-middle"
@@ -78,7 +82,7 @@ export function ChatPreview({ mode, channel, username, color, badgeUrl, emoteUrl
               <span className="break-words">{message || "such hype "}</span>
               <img
                 src={emoteUrl}
-                alt="custom emote"
+                alt="Preview: your emote inline in a Twitch message"
                 width={28}
                 height={28}
                 className="pixelated inline-block size-7 align-middle"

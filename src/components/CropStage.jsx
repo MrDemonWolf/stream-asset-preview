@@ -13,11 +13,18 @@ const CROP_RATIO = 0.7;
 // won't (dim) end up in the emote/sticker. Drag to move, scroll or slide to
 // zoom. The crop ({x,y,size} in source px) is owned by the parent (it rasterizes
 // the result); every change is reported through onChange.
-export function CropStage({ img, src, crop, onChange }) {
+export function CropStage({ img, src, crop, onChange, autoFocus = false }) {
   const stageRef = useRef(null);
   const drag = useRef(null);
   const [stagePx, setStagePx] = useState(0);
   const statusId = useId();
+
+  // After an image loads, move focus into the editor so keyboard users land on
+  // the pan/zoom surface (paired with App's "crop editor ready" announcement).
+  useEffect(() => {
+    if (autoFocus) stageRef.current?.focus({ preventScroll: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const natW = img.naturalWidth;
   const natH = img.naturalHeight;
@@ -179,11 +186,12 @@ export function CropStage({ img, src, crop, onChange }) {
         <span className="font-medium text-foreground">Bright keeps</span> · dimmed
         gets cropped · drag or arrow keys to move, scroll or +/− to zoom
       </p>
-      <p id={statusId} aria-live="polite" className="sr-only">
+      <p id={statusId} aria-live="polite" aria-atomic="true" className="sr-only">
         {framing}
       </p>
 
-      {/* Zoom slider */}
+      {/* Zoom slider — the whole row is a tall (py-3) touch target, and the
+          thumb is enlarged to ~24px so it's finger-friendly on mobile. */}
       <div className="flex items-center gap-3">
         <ZoomIn className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
         <input
@@ -195,7 +203,7 @@ export function CropStage({ img, src, crop, onChange }) {
           onChange={(e) => onZoomSlider(Number(e.target.value))}
           aria-label="Zoom"
           aria-valuetext={`${Math.round(crop.size)} source pixels`}
-          className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary"
+          className="h-6 w-full cursor-pointer appearance-none bg-transparent accent-primary [&::-moz-range-thumb]:size-6 [&::-moz-range-thumb]:cursor-pointer [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-0 [&::-moz-range-thumb]:bg-primary [&::-moz-range-track]:h-2 [&::-moz-range-track]:rounded-full [&::-moz-range-track]:bg-muted [&::-webkit-slider-runnable-track]:h-2 [&::-webkit-slider-runnable-track]:rounded-full [&::-webkit-slider-runnable-track]:bg-muted [&::-webkit-slider-thumb]:-mt-2 [&::-webkit-slider-thumb]:size-6 [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary"
         />
       </div>
 
