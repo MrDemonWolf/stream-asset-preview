@@ -8,12 +8,15 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/stream-asset-preview/favicon-192x192.png" />
     <link rel="apple-touch-icon" href="/stream-asset-preview/apple-touch-icon.png" />
     <meta name="theme-color" content="#0e0e10" />
+    <!-- The app ships a single committed dark theme; tell the browser so native
+         UI (form controls, scrollbars) paints dark instead of flashing light. -->
+    <meta name="color-scheme" content="dark" />
 
     <!-- Primary SEO -->
     <title>Twitch & Discord Emote Maker & Cropper — Free Stream Asset Tool</title>
     <meta
       name="description"
-      content="Free tool for streamers: crop any image to a Twitch emote or badge, or a Discord emoji or sticker, with a drag-and-zoom editor that shows exactly what gets cut. Preview it in real chat and download every size. Also organizes whole emote sets into a slot-aware showcase. No upload, no sign-up."
+      content="Free browser tool for streamers: crop and resize any image into Twitch emotes, sub badges, or Discord emoji and stickers with a drag-and-zoom editor that shows exactly what gets cut — then preview it in real chat and download every required size. Also sorts a whole emote set into slot-aware Twitch tiers and Discord boost levels to export one showcase image. No upload, no sign-up, 100% in your browser."
     />
     <link rel="canonical" href="https://mrdemonwolf.github.io/stream-asset-preview/" />
     <meta name="robots" content="index, follow" />
@@ -49,10 +52,19 @@
         "@type": "WebApplication",
         "name": "Stream Asset Previewer",
         "url": "https://mrdemonwolf.github.io/stream-asset-preview/",
-        "description": "Free tool for streamers to organize Twitch tier and Discord boost-level emotes into a slot-aware showcase grid, preview PNGs and GIFs, resize badges and emotes to spec, and export one advertising image. Runs entirely in the browser.",
+        "description": "Free tool for streamers to crop and resize any image into Twitch emotes, sub badges, and Discord emoji or stickers at every required size, preview them in real chat, and organize a whole emote set into a slot-aware showcase. Runs entirely in the browser.",
         "applicationCategory": "MultimediaApplication",
         "operatingSystem": "Any",
         "browserRequirements": "Requires JavaScript",
+        "screenshot": "https://mrdemonwolf.github.io/stream-asset-preview/og.png",
+        "featureList": [
+          "Crop any image to a square Twitch emote, sub badge, Discord emoji, or sticker",
+          "Drag-and-zoom crop editor that shows exactly what gets cut",
+          "Exports every required size with per-file KB weight and spec warnings",
+          "Live Twitch chat and Discord message previews",
+          "Slot-aware showcase organizer for Twitch tiers and Discord boost levels",
+          "Runs 100% client-side — no upload, no sign-up"
+        ],
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
         "author": { "@type": "Organization", "name": "MrDemonWolf, Inc.", "url": "https://www.mrdemonwolf.com" }
       }

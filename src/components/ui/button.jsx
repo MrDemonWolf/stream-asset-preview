@@ -4,27 +4,36 @@ import { cva } from "class-variance-authority";
 
 import { cn } from "@/lib/utils";
 
+// shadcn/ui button, with two intentional deviations from the generator output
+// (don't "fix" them back):
+//   • sizes step up on coarse pointers for a >=44px touch target, then compact
+//     to the tight desktop heights at sm+ — every button inherits this.
+//   • `destructive` uses --destructive-foreground and `link` uses --primary-text
+//     (not --primary): both are the AA/AAA "colour as text" tokens. --primary is
+//     a button-FILL purple that fails contrast as small text on dark.
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:border-ring",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-[transform,background-color,box-shadow,color] duration-150 ease-out active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg:not([class*='size-'])]:size-4 shrink-0 [&_svg]:shrink-0 outline-none focus-visible:ring-[3px] focus-visible:ring-ring/70 focus-visible:border-ring",
   {
     variants: {
       variant: {
         default:
           "bg-primary text-primary-foreground shadow-xs hover:bg-primary/90",
         destructive:
-          "bg-destructive text-white shadow-xs hover:bg-destructive/90",
+          "bg-destructive text-destructive-foreground shadow-xs hover:bg-destructive/90",
         outline:
           "border bg-transparent shadow-xs hover:bg-accent hover:text-accent-foreground",
         secondary:
           "bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80",
         ghost: "hover:bg-accent hover:text-accent-foreground",
-        link: "text-primary underline-offset-4 hover:underline",
+        link: "text-primary-text underline-offset-4 hover:underline",
       },
+      // Heights step up on coarse pointers (>=44px touch) and settle to compact
+      // desktop heights at sm+. Every button in the app inherits this.
       size: {
-        default: "h-9 px-4 py-2 has-[>svg]:px-3",
-        sm: "h-8 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5",
-        lg: "h-10 rounded-md px-6 has-[>svg]:px-4",
-        icon: "size-9",
+        default: "h-10 px-4 py-2 has-[>svg]:px-3 sm:h-9",
+        sm: "h-9 rounded-md gap-1.5 px-3 has-[>svg]:px-2.5 sm:h-8",
+        lg: "h-11 rounded-md px-6 has-[>svg]:px-4 sm:h-10",
+        icon: "size-10 sm:size-9",
       },
     },
     defaultVariants: {
