@@ -13,6 +13,9 @@ import { Showcase } from "@/components/Showcase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
+import { useFileDrop } from "@/hooks/useFileDrop";
+import { hexToRgb } from "@/lib/color";
+import { isRasterImage, stripExt } from "@/lib/image";
 import { containCrop, cropToDataUrl, downloadDataUrl } from "@/lib/resize";
 import { cn } from "@/lib/utils";
 
@@ -68,11 +71,6 @@ const PLATFORMS = {
   discord: { label: "Discord", assets: ["demoji", "dsticker"], dashLabel: "Discord" },
 };
 
-// Raster only — SVG can taint the canvas and toDataURL would throw, and the
-// platforms want PNG anyway.
-const ACCEPT = /\.(png|gif|jpe?g|webp)$/i;
-const ACCEPT_TYPE = /^image\/(png|gif|jpeg|webp)$/;
-
 export default function App() {
   const [view, setView] = useState("resize");
   const [mode, setMode] = useState("emote");
@@ -112,7 +110,7 @@ export default function App() {
         files[String(size)] = dataUrl;
         bytes[String(size)] = b;
       }
-      if (live) setOut({ files, bytes });
+      setOut({ files, bytes });
     }, 80);
     return () => {
       live = false;
@@ -121,9 +119,7 @@ export default function App() {
   }, [img, crop, mode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function take(files) {
-    const file = Array.from(files ?? []).find(
-      (f) => ACCEPT_TYPE.test(f.type) || ACCEPT.test(f.name),
-    );
+    const file = Array.from(files ?? []).find(isRasterImage);
     if (!file) {
       setError("Use a PNG, GIF, JPG, or WEBP image.");
       return;
@@ -146,7 +142,7 @@ export default function App() {
       });
       setImg(image);
       setSource({
-        name: file.name.replace(/\.[^.]+$/, ""),
+        name: stripExt(file.name),
         width: image.naturalWidth,
         height: image.naturalHeight,
         bytes: file.size,
@@ -377,28 +373,18 @@ export default function App() {
 }
 
 function Dropzone({ spec, onFiles, buttonRef }) {
-  const input = useRef(null);
-  const [over, setOver] = useState(false);
+  const { isOver, dropHandlers, open, inputProps } = useFileDrop(onFiles);
 
   return (
     <>
       <button
         ref={buttonRef}
         type="button"
-        onClick={() => input.current?.click()}
-        onDragOver={(e) => {
-          e.preventDefault();
-          setOver(true);
-        }}
-        onDragLeave={() => setOver(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setOver(false);
-          onFiles(e.dataTransfer.files);
-        }}
+        onClick={open}
+        {...dropHandlers}
         className={cn(
           "flex w-full flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border px-6 py-14 text-center transition-all duration-150 hover:border-primary/60 outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-ring",
-          over && "scale-[0.99] border-primary bg-primary/5",
+          isOver && "scale-[0.99] border-primary bg-primary/5",
         )}
       >
         <span className="flex size-12 items-center justify-center rounded-full bg-primary/15 text-primary-text">
@@ -411,13 +397,7 @@ function Dropzone({ spec, onFiles, buttonRef }) {
           Any size — you'll crop it to {spec.sizes.join(" / ")}px
         </span>
       </button>
-      <input
-        ref={input}
-        type="file"
-        accept="image/png,image/gif,image/jpeg,image/webp"
-        hidden
-        onChange={(e) => e.target.files?.length && onFiles(e.target.files)}
-      />
+      <input {...inputProps} />
     </>
   );
 }
@@ -600,15 +580,19 @@ function Field({ label, children }) {
   );
 }
 
-// Is the chosen username color hard to read on the dark chat panel (#18181b)?
-// Flags anything below WCAG AA (4.5:1) so the user gets a nudge, not a block.
+// The dark chat panel the previews sit on — a baked copy of index.css `--card`.
+// Keep in sync if that token moves (canvas/JS can't read CSS custom properties).
+const CHAT_BG = "#18181b";
+
+// Is the chosen username color hard to read on the dark chat panel? Flags
+// anything below WCAG AA (4.5:1) so the user gets a nudge, not a block.
 function lowContrast(hex) {
-  const c = /^#?[0-9a-f]{6}$/i.test(hex.trim()) ? hex.trim().replace("#", "") : null;
-  if (!c) return false;
+  const rgb = hexToRgb(hex);
+  if (!rgb) return false;
   const lin = (v) => (v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4));
-  const L = (rgb) => 0.2126 * lin(rgb[0]) + 0.7152 * lin(rgb[1]) + 0.0722 * lin(rgb[2]);
-  const fg = L([0, 2, 4].map((i) => parseInt(c.slice(i, i + 2), 16) / 255));
-  const bg = L([0x18, 0x18, 0x1b].map((v) => v / 255));
+  const L = (c) => 0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2]);
+  const fg = L(rgb.map((v) => v / 255));
+  const bg = L(hexToRgb(CHAT_BG).map((v) => v / 255));
   const ratio = (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05);
   return ratio < 4.5;
 }

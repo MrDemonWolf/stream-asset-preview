@@ -5,6 +5,7 @@
 // blocks: [{ label, spec, cap, items: [{ img, name }] }]  — empty sections are
 // expected to be filtered out by the caller.
 
+import { hexToRgb } from "@/lib/color";
 import { downloadDataUrl } from "@/lib/resize";
 
 const W = 1200; // logical px; rendered at 2× for crispness
@@ -12,6 +13,9 @@ const M = 48; // outer margin
 const CELL = 104; // tile size
 const GAP = 14;
 const PER = Math.floor((W - M * 2 + GAP) / (CELL + GAP)); // tiles per row
+// Height above each section's tile grid: label row (28) + spec row (18) + gap
+// (12). Shared by the height measure and the draw loop so they can't drift.
+const HEADER_H = 28 + 18 + 12;
 
 // Baked copy of the app's dark-theme tokens (index.css). Canvas can't read CSS
 // custom properties, so keep these in sync with :root by hand if the palette
@@ -32,7 +36,7 @@ function rows(n) {
 
 function sectionH(block) {
   const r = rows(block.items.length);
-  return 28 + 18 + 12 + (r * CELL + (r - 1) * GAP) + 30; // label + spec + gap + grid + bottom
+  return HEADER_H + (r * CELL + (r - 1) * GAP) + 30; // header + grid + bottom
 }
 
 function roundRect(ctx, x, y, w, h, r) {
@@ -110,7 +114,7 @@ export async function exportShowcase({ title, subtitle, accent, blocks }, filena
     ctx.font = '400 13px "JetBrains Mono Variable", ui-monospace, monospace';
     ctx.fillText(block.spec, M, y + 40);
 
-    let gy = y + 28 + 18 + 12;
+    let gy = y + HEADER_H;
     block.items.forEach((it, i) => {
       const col = i % PER;
       const row = Math.floor(i / PER);
@@ -139,6 +143,6 @@ export async function exportShowcase({ title, subtitle, accent, blocks }, filena
 
 // "#rrggbb" + alpha → rgba() string.
 function hexA(hex, a) {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
+  const [r, g, b] = hexToRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${a})`;
 }

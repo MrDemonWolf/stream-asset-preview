@@ -50,11 +50,9 @@ export async function squareDataUrl(file, size) {
   const img = await loadImage(file);
   const canvas = square(img, size);
   const dataUrl = canvas.toDataURL("image/png");
-  const b64 = dataUrl.slice(dataUrl.indexOf(",") + 1);
-  const pad = b64.endsWith("==") ? 2 : b64.endsWith("=") ? 1 : 0;
   return {
     dataUrl,
-    bytes: Math.floor((b64.length * 3) / 4) - pad,
+    bytes: bytesOfDataUrl(dataUrl),
     w: img.naturalWidth,
     h: img.naturalHeight,
   };
@@ -88,6 +86,16 @@ export function clampCrop(crop, natW, natH, min = 8, max = Infinity) {
   return { x: cx - size / 2, y: cy - size / 2, size };
 }
 
+// Resize a crop to `size` px while keeping its center fixed — the shared math
+// behind zoom (wheel, slider, +/− keys) and the Center button.
+export function recenter(crop, size) {
+  return {
+    x: crop.x + crop.size / 2 - size / 2,
+    y: crop.y + crop.size / 2 - size / 2,
+    size,
+  };
+}
+
 // Draw the square crop into an N×N canvas context. Intersects the crop with the
 // image bounds ourselves and maps only the overlap into a proportional dest
 // rect — anything outside the image stays transparent. Doing the intersection
@@ -107,8 +115,8 @@ function drawSquareCrop(ctx, img, crop, N) {
 
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = "high";
-  // ponytail: single high-quality downscale — add stepped halving if the
-  // smallest sizes (28px) ever look soft.
+  // Single high-quality downscale. If the smallest sizes (28px) ever look soft,
+  // add stepped halving here.
   ctx.drawImage(
     img,
     ix0, iy0, ix1 - ix0, iy1 - iy0,
