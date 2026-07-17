@@ -9,6 +9,9 @@ import { dirname, join } from "node:path";
 const W = 1200, H = 630;
 const buf = Buffer.alloc(W * H * 4);
 
+// Local copy of lib/color's hexToRgb on purpose — this one-shot build script
+// stays dependency-free (and outside the Vite `@` alias) so `node scripts/…`
+// just works.
 const hex = (h) => [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)];
 // PURPLE = Twitch brand mark, BLURPLE = Discord — the card now covers both.
 // These are the DECORATIVE accents (--accent-twitch / --accent-discord), not the

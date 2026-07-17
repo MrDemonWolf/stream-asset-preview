@@ -32,7 +32,10 @@ export async function fetchTwitchEmotes(login) {
   });
   if (!res.ok) throw new Error(`Twitch returned ${res.status}.`);
 
-  const user = (await res.json())?.data?.user;
+  const body = await res.json().catch(() => {
+    throw new Error("Twitch sent back an unreadable response.");
+  });
+  const user = body?.data?.user;
   if (!user) throw new Error(`Channel "${clean}" not found.`);
 
   const seen = new Set();
@@ -50,5 +53,5 @@ export async function fetchTwitchEmotes(login) {
       });
     }
   }
-  return { login: clean, displayName: user.displayName || clean, emotes };
+  return { displayName: user.displayName || clean, emotes };
 }
