@@ -15,7 +15,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
+import { useFileDrop } from "@/hooks/useFileDrop";
 import { exportShowcase } from "@/lib/exportGrid";
+import { isGif, isRasterImage, stripExt } from "@/lib/image";
 import { squareDataUrl } from "@/lib/resize";
 import {
   BOOSTS_FOR_LEVEL,
@@ -30,9 +32,6 @@ import {
 } from "@/lib/platforms";
 import { fetchTwitchEmotes } from "@/lib/twitch";
 import { cn } from "@/lib/utils";
-
-const ACCEPT = /\.(png|gif|jpe?g|webp)$/i;
-const ACCEPT_TYPE = /^image\/(png|gif|jpeg|webp)$/;
 
 // Lighter, AA/AAA-safe variant of each platform accent for when it must be TEXT
 // (the raw accent is only ever a decorative dot/rail).
@@ -107,7 +106,7 @@ export function Showcase() {
   // untouched so they keep animating — resizing would flatten them.
   async function addFiles(sectionKey, fileList) {
     const incoming = [...(fileList ?? [])];
-    const files = incoming.filter((f) => ACCEPT_TYPE.test(f.type) || ACCEPT.test(f.name));
+    const files = incoming.filter(isRasterImage);
     if (incoming.length && !files.length) {
       setAddError("Use PNG, GIF, JPG, or WEBP images.");
       return;
@@ -116,18 +115,22 @@ export function Showcase() {
     const px = uploadPx(platform, sectionKey);
     for (const file of files) {
       const id = nextId.current++;
-      const name = file.name.replace(/\.[^.]+$/, "");
-      const isGif = /gif/i.test(file.type) || /\.gif$/i.test(file.name);
-      if (isGif) {
+      const name = stripExt(file.name);
+      if (isGif(file)) {
+        // GIFs pass through untouched (resizing would flatten the animation).
         const url = URL.createObjectURL(file);
         const img = new Image();
-        img.onload = () => pushItem(sectionKey, { id, name, url, img, bytes: file.size, animated: true });
+        img.onload = () => pushItem(sectionKey, { id, name, url, img, bytes: file.size });
+        img.onerror = () => {
+          URL.revokeObjectURL(url);
+          setAddError(`Couldn't read "${file.name}".`);
+        };
         img.src = url;
       } else {
         try {
           const { dataUrl, bytes } = await squareDataUrl(file, px);
           const img = new Image();
-          img.onload = () => pushItem(sectionKey, { id, name, url: dataUrl, img, bytes, resized: true });
+          img.onload = () => pushItem(sectionKey, { id, name, url: dataUrl, img, bytes });
           img.src = dataUrl;
         } catch {
           setAddError(`Couldn't read "${file.name}".`);
@@ -141,7 +144,9 @@ export function Showcase() {
       const k = keyOf(sectionKey);
       const arr = prev[k] ?? [];
       const gone = arr.find((it) => it.id === id);
-      if (gone) URL.revokeObjectURL(gone.url);
+      // Only blob: URLs (GIF passthrough) need revoking; resized items are data:
+      // URLs and channel-loaded emotes are remote https: — both no-ops to revoke.
+      if (gone?.url?.startsWith("blob:")) URL.revokeObjectURL(gone.url);
       return { ...prev, [k]: arr.filter((it) => it.id !== id) };
     });
   }
@@ -151,7 +156,9 @@ export function Showcase() {
       const next = { ...prev };
       for (const s of cfg.sections) {
         const k = keyOf(s.key);
-        (next[k] ?? []).forEach((it) => URL.revokeObjectURL(it.url));
+        (next[k] ?? []).forEach((it) => {
+          if (it.url?.startsWith("blob:")) URL.revokeObjectURL(it.url);
+        });
         delete next[k];
       }
       return next;
@@ -480,26 +487,16 @@ function StatusBar({
 }
 
 function SectionCard({ accent, section, cap, capLocked, onCap, items, onAdd, onRemove }) {
-  const input = useRef(null);
-  const [over, setOver] = useState(false);
+  const { isOver, dropHandlers, open, inputProps } = useFileDrop(onAdd);
   const overCap = cap != null && items.length > cap;
 
   return (
     <section
       aria-label={section.label}
-      onDragOver={(e) => {
-        e.preventDefault();
-        setOver(true);
-      }}
-      onDragLeave={() => setOver(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        setOver(false);
-        onAdd(e.dataTransfer.files);
-      }}
+      {...dropHandlers}
       className={cn(
         "panel p-4 transition-colors",
-        over && "border-primary bg-primary/5",
+        isOver && "border-primary bg-primary/5",
       )}
     >
       <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
@@ -529,7 +526,7 @@ function SectionCard({ accent, section, cap, capLocked, onCap, items, onAdd, onR
           )}
           <span className="u-label">slots</span>
         </div>
-        <Button size="sm" variant="ghost" className="px-3 text-xs" onClick={() => input.current?.click()}>
+        <Button size="sm" variant="ghost" className="px-3 text-xs" onClick={open}>
           <ImagePlus /> Add
         </Button>
       </div>
@@ -541,7 +538,7 @@ function SectionCard({ accent, section, cap, capLocked, onCap, items, onAdd, onR
       {items.length === 0 ? (
         <button
           type="button"
-          onClick={() => input.current?.click()}
+          onClick={open}
           className="checker flex min-h-24 w-full items-center justify-center rounded-lg border border-dashed border-border py-8 text-xs text-muted-foreground transition-colors hover:border-primary/60 focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           Drop {section.label} emotes here, or click to add
@@ -585,17 +582,7 @@ function SectionCard({ accent, section, cap, capLocked, onCap, items, onAdd, onR
         </p>
       )}
 
-      <input
-        ref={input}
-        type="file"
-        accept="image/png,image/gif,image/jpeg,image/webp"
-        multiple
-        hidden
-        onChange={(e) => {
-          if (e.target.files?.length) onAdd(e.target.files);
-          e.target.value = "";
-        }}
-      />
+      <input {...inputProps} multiple />
     </section>
   );
 }

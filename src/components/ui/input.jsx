@@ -1,5 +1,3 @@
-import * as React from "react";
-
 import { cn } from "@/lib/utils";
 
 // shadcn/ui input. Kept at text-base on mobile (md:text-sm) so iOS doesn't

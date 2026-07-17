@@ -148,9 +148,6 @@ export function uploadPx(platform, sectionKey) {
   return 112;
 }
 
-// Sub points earned per subscription — Prime/T1 = 1, T2 = 2, T3 = 6.
-export const SUB_POINTS = { prime: 1, t1: 1, t2: 2, t3: 6 };
-
 // Next sub-point milestone above `pts`, or null once past the last listed one.
 export function nextMilestone(status, pts) {
   return TWITCH_STATUS[status].milestones.find((m) => m > pts) ?? null;
