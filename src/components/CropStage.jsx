@@ -2,11 +2,16 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Expand, Maximize, RotateCcw, ZoomIn } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { clampCrop, containCrop, coverCrop } from "@/lib/resize";
+import { clampCrop, containCrop, coverCrop, recenter } from "@/lib/resize";
 
 // The crop window is drawn at this fraction of the stage, leaving a margin so
 // the dimmed, about-to-be-cropped area stays visible around it.
 const CROP_RATIO = 0.7;
+// One zoom notch (wheel tick or +/− key) scales the crop by this factor.
+const ZOOM_STEP = 1.12;
+// One arrow-key nudge pans by this fraction of the current crop size, so the
+// step scales with how far you're zoomed in.
+const PAN_STEP = 0.06;
 
 // Interactive square-crop editor. Shows the WHOLE source with everything outside
 // the square crop window dimmed — so you can see exactly what will (bright) and
@@ -28,8 +33,9 @@ export function CropStage({ img, src, crop, onChange, autoFocus = false }) {
 
   const natW = img.naturalWidth;
   const natH = img.naturalHeight;
-  // Zoom bounds: out to 3× the longest side (generous padding) / in to 12px —
-  // minSize capped at maxSize so a tiny (few-px) source can't invert the bounds.
+  // Zoom bounds: out to 3× the longest side (generous padding); in to whichever
+  // is larger of 12px or ⅛ of the shorter side — then clamped to maxSize so a
+  // tiny (few-px) source can't invert the bounds.
   const maxSize = Math.max(natW, natH) * 3;
   const minSize = Math.min(Math.max(12, Math.min(natW, natH) / 8), maxSize);
 
@@ -39,10 +45,7 @@ export function CropStage({ img, src, crop, onChange, autoFocus = false }) {
   const commit = (next) => update(() => next);
 
   // Zoom about the crop center so the framed subject stays put.
-  const zoomAbout = (c, factor) => {
-    const size = c.size * factor;
-    return { x: c.x + c.size / 2 - size / 2, y: c.y + c.size / 2 - size / 2, size };
-  };
+  const zoomAbout = (c, factor) => recenter(c, c.size * factor);
 
   // Measure the stage so the pan/zoom math matches what's on screen, and stays
   // correct when the layout reflows (mobile, sidebar, window resize).
@@ -62,7 +65,7 @@ export function CropStage({ img, src, crop, onChange, autoFocus = false }) {
     if (!el) return;
     const onWheel = (e) => {
       e.preventDefault();
-      update((prev) => zoomAbout(prev, e.deltaY < 0 ? 1 / 1.12 : 1.12));
+      update((prev) => zoomAbout(prev, e.deltaY < 0 ? 1 / ZOOM_STEP : ZOOM_STEP));
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
@@ -77,13 +80,13 @@ export function CropStage({ img, src, crop, onChange, autoFocus = false }) {
   const zoomT = 1 - logNorm(crop.size, minSize, maxSize);
   function onZoomSlider(t) {
     const size = logLerp(minSize, maxSize, 1 - t);
-    update((prev) => ({ x: prev.x + prev.size / 2 - size / 2, y: prev.y + prev.size / 2 - size / 2, size }));
+    update((prev) => recenter(prev, size));
   }
 
   // Keyboard equivalent for pan/zoom (WCAG 2.1.1): arrows nudge the frame, +/−
   // zoom. Step is ~6% of the frame so it scales with the current zoom.
   function onKeyDown(e) {
-    const step = Math.max(1, crop.size * 0.06);
+    const step = Math.max(1, crop.size * PAN_STEP);
     const pan = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
     if (pan[e.key]) {
       e.preventDefault();
@@ -91,10 +94,10 @@ export function CropStage({ img, src, crop, onChange, autoFocus = false }) {
       update((prev) => ({ ...prev, x: prev.x + dx, y: prev.y + dy }));
     } else if (e.key === "+" || e.key === "=") {
       e.preventDefault();
-      update((prev) => zoomAbout(prev, 1 / 1.12));
+      update((prev) => zoomAbout(prev, 1 / ZOOM_STEP));
     } else if (e.key === "-" || e.key === "_") {
       e.preventDefault();
-      update((prev) => zoomAbout(prev, 1.12));
+      update((prev) => zoomAbout(prev, ZOOM_STEP));
     }
   }
 
