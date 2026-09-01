@@ -4,7 +4,15 @@
 //   • "showcase" (components/Showcase) — organise a whole emote set into slots.
 // No backend, no uploads: images are decoded to object URLs / canvas locally.
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, Download, ExternalLink, ImagePlus, ListChecks, Radio, RotateCcw } from "lucide-react";
+import {
+  AlertTriangle,
+  Download,
+  ExternalLink,
+  ImagePlus,
+  ListChecks,
+  Radio,
+  RotateCcw,
+} from "lucide-react";
 
 import { ChatPreview } from "@/components/ChatPreview";
 import { CropStage } from "@/components/CropStage";
@@ -16,60 +24,11 @@ import { Segmented } from "@/components/ui/segmented";
 import { useFileDrop } from "@/hooks/useFileDrop";
 import { hexToRgb } from "@/lib/color";
 import { isRasterImage, stripExt } from "@/lib/image";
-import { containCrop, cropToDataUrl, downloadDataUrl } from "@/lib/resize";
+import { containCrop, cropToDataUrl, downloadDataUrl, loadImage, safeFilename } from "@/lib/resize";
+import { CROP_PLATFORMS, DASH, GUIDES, SPECS } from "@/lib/specs";
+import { captureTwitchRedirect } from "@/lib/twitch";
 import { cn } from "@/lib/utils";
-
-// Published asset specs — the sizes and limits this tool crops to. `upload` is
-// the file you hand the platform; `chat` is the size shown in the preview.
-// `maxBytes` is the per-file cap. Every export is a square PNG built from the
-// crop, so animation is always dropped (we warn on GIF sources).
-const SPECS = {
-  emote: {
-    platform: "twitch",
-    label: "Emote",
-    sizes: [28, 56, 112],
-    upload: "112",
-    chat: "28",
-    maxBytes: 1024 * 1024,
-    note: "Twitch emote: 28 / 56 / 112px PNG, transparent, square, under 1 MB each. The 112 is the one you upload.",
-    guide: "https://help.twitch.tv/s/article/emote-guidelines",
-  },
-  badge: {
-    platform: "twitch",
-    label: "Badge",
-    sizes: [18, 36, 72, 120],
-    upload: "120",
-    chat: "18",
-    maxBytes: 25 * 1024,
-    note: "Twitch event badge: upload one square, non-animated PNG, at least 120×120 and under 25 KB. Twitch generates the 18 / 36 / 72 chat sizes from it.",
-    guide: "https://help.twitch.tv/s/article/subscriber-badge-guide",
-  },
-  demoji: {
-    platform: "discord",
-    label: "Emoji",
-    sizes: [48, 128],
-    upload: "128",
-    chat: "128",
-    maxBytes: 256 * 1024,
-    note: "Discord emoji: upload up to 128×128 under 256 KB (PNG). Shows ~22px inline in chat.",
-    guide: "https://support.discord.com/hc/en-us/articles/360036479811",
-  },
-  dsticker: {
-    platform: "discord",
-    label: "Sticker",
-    sizes: [160, 320],
-    upload: "320",
-    chat: "320",
-    maxBytes: 512 * 1024,
-    note: "Discord sticker: 320×320 PNG under 512 KB. Shows ~160px in chat.",
-    guide: "https://support.discord.com/hc/en-us/articles/360036479811",
-  },
-};
-
-const PLATFORMS = {
-  twitch: { label: "Twitch", assets: ["emote", "badge"], dashLabel: "Twitch" },
-  discord: { label: "Discord", assets: ["demoji", "dsticker"], dashLabel: "Discord" },
-};
+import { rejectionText, sniff, validateIntake } from "@/lib/validate";
 
 export default function App() {
   const [view, setView] = useState("resize");
@@ -92,6 +51,29 @@ export default function App() {
   // dropzone (without autofocusing it on the very first page load).
   const hadImage = useRef(false);
   const dropRef = useRef(null);
+  // Monotonic upload id + abort handle so an older, slower decode can never
+  // overwrite a newer upload; `mounted` blocks setState after unmount.
+  const uploadSeq = useRef(0);
+  const abortRef = useRef(null);
+  const mounted = useRef(true);
+
+  useEffect(() => {
+    mounted.current = true;
+    // Capture an OAuth redirect at the APP level, not inside Showcase: the app
+    // opens on the crop view, so a Showcase-only handler would miss the token
+    // (and leave it sitting in the URL fragment).
+    captureTwitchRedirect();
+    return () => {
+      mounted.current = false;
+      abortRef.current?.abort();
+    };
+  }, []);
+
+  // Revoke the display object URL when it's replaced and on unmount.
+  useEffect(() => {
+    if (!srcUrl) return undefined;
+    return () => URL.revokeObjectURL(srcUrl);
+  }, [srcUrl]);
 
   // Rasterize the crop into every target size — debounced so dragging stays
   // smooth (the editor itself gives live feedback; the PNGs catch up on pause).
@@ -103,14 +85,19 @@ export default function App() {
     let live = true;
     const id = setTimeout(() => {
       if (!live) return;
-      const files = {};
-      const bytes = {};
-      for (const size of spec.sizes) {
-        const { dataUrl, bytes: b } = cropToDataUrl(img, crop, size);
-        files[String(size)] = dataUrl;
-        bytes[String(size)] = b;
+      try {
+        const files = {};
+        const bytes = {};
+        for (const size of spec.sizes) {
+          const { dataUrl, bytes: b } = cropToDataUrl(img, crop, size);
+          files[String(size)] = dataUrl;
+          bytes[String(size)] = b;
+        }
+        setOut({ files, bytes });
+      } catch {
+        setOut(null);
+        setError("Couldn't render the crop — try a smaller image.");
       }
-      setOut({ files, bytes });
     }, 80);
     return () => {
       live = false;
@@ -124,22 +111,27 @@ export default function App() {
       setError("Use a PNG, GIF, JPG, or WEBP image.");
       return;
     }
-    // One object URL, kept alive for both the decode and the on-screen <img>
-    // (revoked in replace() / on the next upload) so the crop editor can display
-    // the source. Canvas rasterization reuses the same decoded bitmap.
-    const url = URL.createObjectURL(file);
+    // Claim this upload and cancel any older in-flight decode so a slow earlier
+    // image can't win the race and overwrite this one.
+    const seq = ++uploadSeq.current;
+    abortRef.current?.abort();
+    const ac = new AbortController();
+    abortRef.current = ac;
+    const superseded = () => seq !== uploadSeq.current || !mounted.current;
     try {
-      const image = await new Promise((res, rej) => {
-        const i = new Image();
-        i.onload = () => res(i);
-        i.onerror = () => rej(new Error("decode failed"));
-        i.src = url;
-      });
+      const buffer = await file.arrayBuffer();
+      const info = sniff(buffer);
+      const image = await loadImage(file, { signal: ac.signal });
+      const { ok, reasons } = validateIntake(file, info, image);
+      if (superseded()) return;
+      if (!ok) {
+        setError(rejectionText(file.name, reasons));
+        return;
+      }
+      // A fresh display URL, revoked by the srcUrl effect on replace/unmount.
+      const url = URL.createObjectURL(file);
       setError(null);
-      setSrcUrl((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
-        return url;
-      });
+      setSrcUrl(url);
       setImg(image);
       setSource({
         name: stripExt(file.name),
@@ -151,15 +143,17 @@ export default function App() {
       setCrop(containCrop(image)); // start showing the whole image, nothing lost
       hadImage.current = true;
       setAnnounce("Image loaded. Crop editor ready.");
-    } catch {
-      URL.revokeObjectURL(url);
+    } catch (e) {
+      if (e?.name === "AbortError" || superseded()) return;
       setError("Could not read that image.");
     }
   }
 
   function replace() {
-    if (srcUrl) URL.revokeObjectURL(srcUrl);
-    setSrcUrl(null);
+    // Invalidate any in-flight decode so it can't repopulate after we clear.
+    uploadSeq.current++;
+    abortRef.current?.abort();
+    setSrcUrl(null); // effect revokes the old URL
     setImg(null);
     setSource(null);
     setCrop(null);
@@ -232,15 +226,15 @@ export default function App() {
                 label="Platform"
                 showLabel
                 value={platform}
-                options={Object.entries(PLATFORMS).map(([k, p]) => [k, p.label])}
-                onChange={(p) => setMode(PLATFORMS[p].assets[0])}
+                options={Object.entries(CROP_PLATFORMS).map(([k, p]) => [k, p.label])}
+                onChange={(p) => setMode(CROP_PLATFORMS[p].assets[0])}
               />
               <div className="hidden h-10 w-px self-end bg-border sm:block" aria-hidden="true" />
               <Segmented
                 label="Asset type"
                 showLabel
                 value={mode}
-                options={PLATFORMS[platform].assets.map((k) => [k, SPECS[k].label])}
+                options={CROP_PLATFORMS[platform].assets.map((k) => [k, SPECS[k].label])}
                 onChange={setMode}
               />
             </div>
@@ -259,7 +253,9 @@ export default function App() {
                     <div className="space-y-4">
                       <div className="flex items-center justify-between gap-2">
                         <div className="min-w-0">
-                          <p className="truncate font-mono text-sm text-foreground">{source.name}</p>
+                          <p className="truncate font-mono text-sm text-foreground">
+                            {source.name}
+                          </p>
                           <p className="text-xs text-muted-foreground">
                             source {source.width}×{source.height}px · {fmtBytes(source.bytes)}
                           </p>
@@ -288,7 +284,10 @@ export default function App() {
                   >
                     {warnings.map((w) => (
                       <li key={w} className="flex items-start gap-2">
-                        <AlertTriangle className="mt-0.5 size-4 shrink-0 text-destructive-text" aria-hidden="true" />
+                        <AlertTriangle
+                          className="mt-0.5 size-4 shrink-0 text-destructive-text"
+                          aria-hidden="true"
+                        />
                         <span>{w}</span>
                       </li>
                     ))}
@@ -297,7 +296,7 @@ export default function App() {
 
                 {out && <SizeGrid spec={spec} out={out} name={source.name} />}
 
-                {out && <NextSteps mode={mode} spec={spec} />}
+                {out && <NextSteps spec={spec} />}
               </section>
 
               {/* Right: live preview + controls */}
@@ -306,10 +305,18 @@ export default function App() {
                   <>
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <Field label="Channel">
-                        <Input value={channel} onChange={(e) => setChannel(e.target.value)} className="font-mono" />
+                        <Input
+                          value={channel}
+                          onChange={(e) => setChannel(e.target.value)}
+                          className="font-mono"
+                        />
                       </Field>
                       <Field label="Username">
-                        <Input value={username} onChange={(e) => setUsername(e.target.value)} className="font-mono" />
+                        <Input
+                          value={username}
+                          onChange={(e) => setUsername(e.target.value)}
+                          className="font-mono"
+                        />
                       </Field>
                       <div role="group" aria-label="Name color" className="block space-y-1.5">
                         <span className="u-label block">Name color</span>
@@ -344,17 +351,25 @@ export default function App() {
                       channel={channel}
                       username={username}
                       color={color}
-                      badgeUrl={out?.files[spec.chat]}
-                      emoteUrl={out?.files[spec.chat]}
+                      badgeUrl={out?.files[String(spec.previewSize)]}
+                      emoteUrl={out?.files[String(spec.previewSize)]}
                       message={message}
                     />
                   </>
                 ) : (
                   <>
                     <Field label="Username">
-                      <Input value={username} onChange={(e) => setUsername(e.target.value)} className="font-mono" />
+                      <Input
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        className="font-mono"
+                      />
                     </Field>
-                    <DiscordPreview kind={mode} url={out?.files[spec.upload]} username={username} />
+                    <DiscordPreview
+                      kind={mode}
+                      url={out?.files[String(spec.previewSize)]}
+                      username={username}
+                    />
                   </>
                 )}
               </section>
@@ -404,13 +419,14 @@ function Dropzone({ spec, onFiles, buttonRef }) {
 
 function SizeGrid({ spec, out, name }) {
   const uploadDest = spec.platform === "twitch" ? "Twitch" : "Discord";
+  const base = safeFilename(name);
   return (
     <div className="panel space-y-3 p-4">
       <div className="flex items-center justify-between gap-3">
         <h2 className="font-display text-lg font-semibold text-foreground">Export sizes</h2>
         <Button
           onClick={() =>
-            spec.sizes.forEach((s) => downloadDataUrl(out.files[String(s)], `${name}-${s}.png`))
+            spec.sizes.forEach((s) => downloadDataUrl(out.files[String(s)], `${base}-${s}.png`))
           }
         >
           <Download /> Download all
@@ -418,7 +434,7 @@ function SizeGrid({ spec, out, name }) {
       </div>
       <div className="checker flex flex-wrap items-end justify-center gap-x-6 gap-y-4 rounded-lg px-4 py-6">
         {spec.sizes.map((size) => {
-          const isUpload = String(size) === spec.upload;
+          const isUpload = spec.requiredUploads.includes(size);
           const display = Math.min(size, 160);
           return (
             <div key={size} className="flex flex-col items-center gap-1.5">
@@ -442,7 +458,7 @@ function SizeGrid({ spec, out, name }) {
                 size="sm"
                 variant="ghost"
                 className="px-3 text-xs"
-                onClick={() => downloadDataUrl(out.files[String(size)], `${name}-${size}.png`)}
+                onClick={() => downloadDataUrl(out.files[String(size)], `${base}-${size}.png`)}
                 aria-label={`Download ${size}px PNG`}
               >
                 <Download /> PNG
@@ -459,10 +475,10 @@ function Footer() {
   return (
     <footer className="mt-16 border-t border-border pt-8 text-center text-xs text-muted-foreground">
       <p className="mx-auto max-w-xl">
-        Not affiliated with, endorsed by, or sponsored by Twitch or Discord. Asset
-        specs may change — always confirm against the official{" "}
+        Not affiliated with, endorsed by, or sponsored by Twitch or Discord. Asset specs may change
+        — always confirm against the official{" "}
         <a
-          href="https://help.twitch.tv/s/article/subscriber-badge-guide"
+          href={GUIDES.twitchBadge}
           target="_blank"
           rel="noreferrer"
           className="font-medium text-foreground underline-offset-2 hover:underline"
@@ -471,7 +487,7 @@ function Footer() {
         </a>{" "}
         and{" "}
         <a
-          href="https://support.discord.com/hc/en-us/articles/360036479811"
+          href={GUIDES.discordEmoji}
           target="_blank"
           rel="noreferrer"
           className="font-medium text-foreground underline-offset-2 hover:underline"
@@ -481,21 +497,41 @@ function Footer() {
         guidelines.
       </p>
       <nav className="mt-4 flex items-center justify-center gap-4">
-        <a href="https://www.mrdemonwolf.com" target="_blank" rel="noreferrer" className="hover:text-foreground">
+        <a
+          href="https://www.mrdemonwolf.com"
+          target="_blank"
+          rel="noreferrer"
+          className="hover:text-foreground"
+        >
           mrdemonwolf.com
         </a>
         <span aria-hidden="true">·</span>
-        <a href="https://mrdwolf.net/discord" target="_blank" rel="noreferrer" className="hover:text-foreground">
+        <a
+          href="https://mrdwolf.net/discord"
+          target="_blank"
+          rel="noreferrer"
+          className="hover:text-foreground"
+        >
           Discord
         </a>
         <span aria-hidden="true">·</span>
-        <a href="https://github.com/mrdemonwolf/stream-asset-preview" target="_blank" rel="noreferrer" className="hover:text-foreground">
+        <a
+          href="https://github.com/mrdemonwolf/stream-asset-preview"
+          target="_blank"
+          rel="noreferrer"
+          className="hover:text-foreground"
+        >
           GitHub
         </a>
       </nav>
       <p className="mt-4">
         © {new Date().getFullYear()} Made with love by{" "}
-        <a href="https://www.mrdemonwolf.com" target="_blank" rel="noreferrer" className="font-medium text-primary-text hover:underline">
+        <a
+          href="https://www.mrdemonwolf.com"
+          target="_blank"
+          rel="noreferrer"
+          className="font-medium text-primary-text hover:underline"
+        >
           MrDemonWolf, Inc.
         </a>
         {__COMMIT_HASH__ !== "dev" && (
@@ -516,46 +552,16 @@ function Footer() {
   );
 }
 
-const STEPS = {
-  badge: [
-    "Download the 120px PNG above (the one tagged “Upload to Twitch”).",
-    "Creator Dashboard → Viewer Rewards → Badges → Create Event.",
-    "Upload it: square PNG, not animated, ≤25 KB, at least 120×120.",
-    "Set Badge Name (≤25 chars), Subscription Count (1–5), and Badge Description.",
-    "Pick Start/End dates (≤28 days). Optionally enable a Watch Time reward with a second badge.",
-  ],
-  emote: [
-    "Download the 28 / 56 / 112px PNGs above.",
-    "Creator Dashboard → Viewer Rewards → Emotes.",
-    "Upload each tier — emotes must be square PNG, transparent, under 1 MB.",
-  ],
-  demoji: [
-    "Download the 128px PNG above (the one tagged “Upload to Discord”).",
-    "Server Settings → Emoji → Upload Emoji.",
-    "Pick the file, name it (2–32 chars, letters/numbers/underscores), and save.",
-  ],
-  dsticker: [
-    "Download the 320px PNG above (the one tagged “Upload to Discord”).",
-    "Server Settings → Stickers → Upload Sticker.",
-    "Add it: 320×320 PNG under 512 KB, give it a name and a related emoji.",
-  ],
-};
-
-const DASH = {
-  twitch: { href: "https://dashboard.twitch.tv/", label: "Open Twitch Creator Dashboard" },
-  discord: { href: "https://discord.com/channels/@me", label: "Open Discord" },
-};
-
-function NextSteps({ mode, spec }) {
+function NextSteps({ spec }) {
   const dash = DASH[spec.platform];
   return (
     <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
       <h3 className="mb-2 flex items-center gap-2 font-display text-base font-semibold text-foreground">
         <ListChecks className="size-4 text-primary-text" aria-hidden="true" />
-        Next: add this to {PLATFORMS[spec.platform].dashLabel}
+        Next: add this to {CROP_PLATFORMS[spec.platform].dashLabel}
       </h3>
       <ol className="ml-1 list-inside list-decimal space-y-1 text-sm text-muted-foreground marker:text-primary-text">
-        {STEPS[mode].map((s) => (
+        {spec.steps.map((s) => (
           <li key={s}>{s}</li>
         ))}
       </ol>
@@ -614,11 +620,15 @@ function specWarnings({ crop, out, source, spec }) {
     );
   }
 
-  const uploadBytes = out.bytes[spec.upload];
-  if (uploadBytes > spec.maxBytes) {
-    list.push(
-      `The ${spec.upload}px PNG is ${fmtBytes(uploadBytes)} — the cap is ${fmtBytes(spec.maxBytes)}. Simplify the art or reduce colors.`,
-    );
+  // Every REQUIRED upload file must clear the per-file cap — Twitch badges ship
+  // as three separate files, so all three are checked, not just one.
+  for (const size of spec.requiredUploads) {
+    const bytes = out.bytes[String(size)];
+    if (bytes > spec.maxBytes) {
+      list.push(
+        `The ${size}px PNG is ${fmtBytes(bytes)} — the cap is ${fmtBytes(spec.maxBytes)} per file. Simplify the art or reduce colors.`,
+      );
+    }
   }
   return list;
 }

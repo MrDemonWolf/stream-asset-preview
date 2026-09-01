@@ -4,13 +4,32 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" href="/stream-asset-preview/favicon.ico" sizes="any" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/stream-asset-preview/favicon-32x32.png" />
-    <link rel="icon" type="image/png" sizes="192x192" href="/stream-asset-preview/favicon-192x192.png" />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="32x32"
+      href="/stream-asset-preview/favicon-32x32.png"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      sizes="192x192"
+      href="/stream-asset-preview/favicon-192x192.png"
+    />
     <link rel="apple-touch-icon" href="/stream-asset-preview/apple-touch-icon.png" />
     <meta name="theme-color" content="#0e0e10" />
     <!-- The app ships a single committed dark theme; tell the browser so native
          UI (form controls, scrollbars) paints dark instead of flashing light. -->
     <meta name="color-scheme" content="dark" />
+
+    <!-- Don't leak the full URL to third parties (Twitch API / emote CDN). -->
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <!-- A restrictive Content-Security-Policy is injected into the PRODUCTION
+         build by vite.config.js (a meta here would break Vite's dev inline
+         scripts). Permitted external origins, all HTTPS:
+           connect-src  api.twitch.tv, id.twitch.tv   — Helix API + OAuth validate
+           img-src      static-cdn.jtvnw.net           — Twitch emote CDN
+         Everything else is same-origin ('self'); no third-party scripts. -->
 
     <!-- Primary SEO -->
     <title>Twitch & Discord Emote Maker & Cropper — Free Stream Asset Tool</title>
@@ -43,7 +62,10 @@
       name="twitter:description"
       content="Organize your Twitch tier and Discord boost-level emotes into a slot-aware grid, preview PNGs & GIFs, and export one advertising image. 100% in your browser — no upload, no sign-up."
     />
-    <meta name="twitter:image" content="https://mrdemonwolf.github.io/stream-asset-preview/og.png" />
+    <meta
+      name="twitter:image"
+      content="https://mrdemonwolf.github.io/stream-asset-preview/og.png"
+    />
 
     <!-- Structured data -->
     <script type="application/ld+json">
@@ -66,7 +88,11 @@
           "Runs 100% client-side — no upload, no sign-up"
         ],
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
-        "author": { "@type": "Organization", "name": "MrDemonWolf, Inc.", "url": "https://www.mrdemonwolf.com" }
+        "author": {
+          "@type": "Organization",
+          "name": "MrDemonWolf, Inc.",
+          "url": "https://www.mrdemonwolf.com"
+        }
       }
     </script>
   </head>

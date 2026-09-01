@@ -17,20 +17,35 @@ import { Input } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
 import { useFileDrop } from "@/hooks/useFileDrop";
 import { exportShowcase } from "@/lib/exportGrid";
-import { isGif, isRasterImage, stripExt } from "@/lib/image";
-import { squareDataUrl } from "@/lib/resize";
+import { isGif, stripExt } from "@/lib/image";
+import { loadImage, safeFilename, squareDataUrl } from "@/lib/resize";
+import {
+  MAX_FILES_PER_ADD,
+  MAX_SHOWCASE_ITEMS,
+  rejectionText,
+  sniff,
+  validateForSection,
+} from "@/lib/validate";
 import {
   BOOSTS_FOR_LEVEL,
-  PLATFORMS,
+  SHOWCASE,
   TWITCH_STATUS,
   capFor,
   levelForBoosts,
   nextMilestone,
   offSpec,
+  sectionSpec,
+  slotStartLine,
   twitchSlotCap,
   uploadPx,
-} from "@/lib/platforms";
-import { fetchTwitchEmotes } from "@/lib/twitch";
+} from "@/lib/specs";
+import {
+  beginTwitchAuth,
+  disconnectTwitch,
+  fetchTwitchEmotes,
+  isTwitchConnected,
+  twitchConfigured,
+} from "@/lib/twitch";
 import { cn } from "@/lib/utils";
 
 // Lighter, AA/AAA-safe variant of each platform accent for when it must be TEXT
@@ -62,8 +77,39 @@ export function Showcase() {
   // { "<platform>:<sectionKey>": Item[] } — Item = { id, name, url, img, bytes }
   const [store, setStore] = useState({});
   const nextId = useRef(0);
+  const [connected, setConnected] = useState(false);
+  const [exportState, setExportState] = useState(null); // null | "working" | "done" | error msg
+  // Race guards + cleanup handles.
+  const mounted = useRef(true);
+  const loadSeq = useRef(0);
+  const loadAbort = useRef(null);
+  // Every in-flight add batch, so unmount can cancel them all. Batches are NOT
+  // cancelled by each other — appends are race-safe, and dropping into a second
+  // section must not silently kill the first section's decodes.
+  const addAborts = useRef(new Set());
+  const storeRef = useRef(store);
+  storeRef.current = store;
 
-  const cfg = PLATFORMS[platform];
+  useEffect(() => {
+    mounted.current = true;
+    // The token is captured in App (the app can open on the crop view); here we
+    // only reflect whether a session exists.
+    setConnected(isTwitchConnected());
+    // Same Set for the component's life — bind it now so cleanup can't read a
+    // swapped-out ref.
+    const pending = addAborts.current;
+    return () => {
+      mounted.current = false;
+      loadAbort.current?.abort();
+      for (const c of pending) c.abort();
+      // Revoke every live blob: URL so switching views doesn't leak memory.
+      for (const arr of Object.values(storeRef.current)) {
+        for (const it of arr) if (it.url?.startsWith("blob:")) URL.revokeObjectURL(it.url);
+      }
+    };
+  }, []);
+
+  const cfg = SHOWCASE[platform];
   const accentText = ACCENT_TEXT[platform];
   const keyOf = (s) => `${platform}:${s}`;
   const list = (s) => store[keyOf(s)] ?? [];
@@ -105,37 +151,68 @@ export function Showcase() {
   // at the slot's spec (112 Twitch / 128 emoji / 320 sticker). GIFs pass through
   // untouched so they keep animating — resizing would flatten them.
   async function addFiles(sectionKey, fileList) {
-    const incoming = [...(fileList ?? [])];
-    const files = incoming.filter(isRasterImage);
-    if (incoming.length && !files.length) {
-      setAddError("Use PNG, GIF, JPG, or WEBP images.");
-      return;
+    const section = cfg.sections.find((s) => s.key === sectionKey);
+    let incoming = [...(fileList ?? [])];
+    if (incoming.length > MAX_FILES_PER_ADD) {
+      setAddError(
+        `Only the first ${MAX_FILES_PER_ADD} files were taken — add the rest in another batch.`,
+      );
+      incoming = incoming.slice(0, MAX_FILES_PER_ADD);
+    } else {
+      setAddError(null);
     }
-    setAddError(null);
     const px = uploadPx(platform, sectionKey);
-    for (const file of files) {
-      const id = nextId.current++;
-      const name = stripExt(file.name);
-      if (isGif(file)) {
-        // GIFs pass through untouched (resizing would flatten the animation).
-        const url = URL.createObjectURL(file);
-        const img = new Image();
-        img.onload = () => pushItem(sectionKey, { id, name, url, img, bytes: file.size });
-        img.onerror = () => {
-          URL.revokeObjectURL(url);
-          setAddError(`Couldn't read "${file.name}".`);
-        };
-        img.src = url;
-      } else {
+    const ac = new AbortController();
+    addAborts.current.add(ac);
+    const rejects = [];
+
+    try {
+      for (const file of incoming) {
+        if (!mounted.current) return;
+        const totalNow = Object.values(storeRef.current).reduce((n, a) => n + a.length, 0);
+        if (totalNow >= MAX_SHOWCASE_ITEMS) {
+          rejects.push(rejectionText(file.name, [`showcase is full (${MAX_SHOWCASE_ITEMS} max)`]));
+          continue;
+        }
+        const id = nextId.current++;
+        const name = stripExt(file.name);
         try {
-          const { dataUrl, bytes } = await squareDataUrl(file, px);
-          const img = new Image();
-          img.onload = () => pushItem(sectionKey, { id, name, url: dataUrl, img, bytes });
-          img.src = dataUrl;
-        } catch {
-          setAddError(`Couldn't read "${file.name}".`);
+          const buffer = await file.arrayBuffer();
+          const info = sniff(buffer);
+          // Decode to inspect real dimensions + drive validation/animation checks.
+          const decoded = await loadImage(file, { signal: ac.signal });
+          const { ok, reasons } = validateForSection(file, info, decoded, section);
+          if (!ok) {
+            rejects.push(rejectionText(file.name, reasons));
+            continue;
+          }
+          if (isGif(file)) {
+            // GIFs pass through untouched (resizing would flatten the animation).
+            const url = URL.createObjectURL(file);
+            if (mounted.current)
+              pushItem(sectionKey, { id, name, url, img: decoded, bytes: file.size });
+            else URL.revokeObjectURL(url);
+          } else {
+            const { dataUrl, bytes } = await squareDataUrl(file, px, { signal: ac.signal });
+            // Await the re-render so a failure lands in `rejects` while this
+            // batch is still reporting — an onload/onerror callback would fire
+            // after the summary below had already been shown.
+            const img = await new Promise((res, rej) => {
+              const i = new Image();
+              i.onload = () => res(i);
+              i.onerror = () => rej(new Error("render failed"));
+              i.src = dataUrl;
+            });
+            if (mounted.current) pushItem(sectionKey, { id, name, url: dataUrl, img, bytes });
+          }
+        } catch (e) {
+          if (e?.name === "AbortError") return;
+          rejects.push(rejectionText(file.name, ["couldn't read the file"]));
         }
       }
+      if (mounted.current && rejects.length) setAddError(rejects.join(" "));
+    } finally {
+      addAborts.current.delete(ac);
     }
   }
 
@@ -173,8 +250,14 @@ export function Showcase() {
     setLoadError(null);
     setLoadMsg(null);
     setLoading(true);
+    // Claim this load + cancel any older one so a slow earlier request can't win.
+    const seq = ++loadSeq.current;
+    loadAbort.current?.abort();
+    const ac = new AbortController();
+    loadAbort.current = ac;
+    const stale = () => seq !== loadSeq.current || !mounted.current;
     try {
-      const { displayName, emotes } = await fetchTwitchEmotes(name);
+      const { displayName, emotes } = await fetchTwitchEmotes(name, { signal: ac.signal });
       const loaded = await Promise.all(
         emotes.map(
           (e) =>
@@ -187,6 +270,7 @@ export function Showcase() {
             }),
         ),
       );
+      if (stale()) return;
       setStore((prev) => {
         const next = { ...prev };
         for (const s of cfg.sections) {
@@ -202,27 +286,56 @@ export function Showcase() {
         }
         return next;
       });
-      setLoadMsg(`Loaded ${emotes.length} emote${emotes.length === 1 ? "" : "s"} from ${displayName}.`);
+      setLoadMsg(
+        `Loaded ${emotes.length} emote${emotes.length === 1 ? "" : "s"} from ${displayName}.`,
+      );
     } catch (e) {
-      setLoadError(e.message);
+      if (e?.name === "AbortError" || stale()) return;
+      if (e?.needsAuth) {
+        setConnected(false);
+        setLoadError(e.message);
+      } else {
+        setLoadError(e.message);
+      }
     } finally {
-      setLoading(false);
+      if (!stale()) setLoading(false);
     }
   }
 
-  function doExport() {
+  function connectTwitch() {
+    try {
+      beginTwitchAuth();
+    } catch (e) {
+      setLoadError(e.message);
+    }
+  }
+  function disconnect() {
+    disconnectTwitch();
+    setConnected(false);
+    setLoadMsg("Twitch disconnected.");
+  }
+
+  async function doExport() {
     const subtitle =
       cfg.label + (cfg.levels ? ` · ${cfg.levels[level]}` : ` · ${TWITCH_STATUS[status].label}`);
     const blocks = cfg.sections.map((s) => ({
       label: s.label,
-      spec: s.spec,
+      spec: sectionSpec(platform, s),
       cap: capOf(s),
       items: list(s.key),
     }));
-    exportShowcase(
-      { title: title || cfg.label, subtitle, accent: cfg.accent, blocks },
-      `${(title || cfg.label).toLowerCase().replace(/\s+/g, "-")}-${cfg.key}-showcase.png`,
-    );
+    const filename = `${safeFilename(title || cfg.label)}-${cfg.key}-showcase.png`;
+    setExportState("working");
+    try {
+      const okDone = await exportShowcase(
+        { title: title || cfg.label, subtitle, accent: cfg.accent, blocks },
+        filename,
+      );
+      if (!mounted.current) return;
+      setExportState(okDone ? "done" : "Nothing to export yet — add some emotes first.");
+    } catch (e) {
+      if (mounted.current) setExportState(e?.message || "Export failed — try a smaller showcase.");
+    }
   }
 
   const todos = buildTodos(cfg, platform, list, capOf);
@@ -253,7 +366,7 @@ export function Showcase() {
             setPlatform(p);
             setConfirmClear(false);
           }}
-          options={Object.values(PLATFORMS).map((p) => [p.key, p.label])}
+          options={Object.values(SHOWCASE).map((p) => [p.key, p.label])}
         />
         <label className="block space-y-1.5">
           <span className="u-label block">Showcase title</span>
@@ -285,6 +398,17 @@ export function Showcase() {
         </div>
       </div>
 
+      {exportState && exportState !== "done" && (
+        <p role="status" aria-live="polite" className="text-center text-xs text-muted-foreground">
+          {exportState === "working" ? "Baking your showcase PNG…" : exportState}
+        </p>
+      )}
+      {exportState === "done" && (
+        <p role="status" aria-live="polite" className="text-center text-xs text-success-text">
+          Showcase PNG downloaded.
+        </p>
+      )}
+
       {/* Status console — declare where you stand so the slot counts are real */}
       <StatusBar
         platform={platform}
@@ -297,40 +421,73 @@ export function Showcase() {
         level={level}
         boosts={boosts}
         levels={cfg.levels}
-        onLevel={(lvl) => reseed(() => { setLevel(lvl); setBoosts(BOOSTS_FOR_LEVEL[lvl]); })}
-        onBoosts={(n) => reseed(() => { setBoosts(n); setLevel(levelForBoosts(n)); })}
+        onLevel={(lvl) =>
+          reseed(() => {
+            setLevel(lvl);
+            setBoosts(BOOSTS_FOR_LEVEL[lvl]);
+          })
+        }
+        onBoosts={(n) =>
+          reseed(() => {
+            setBoosts(n);
+            setLevel(levelForBoosts(n));
+          })
+        }
       />
 
-      <p className="mx-auto max-w-2xl text-center text-xs text-muted-foreground sm:text-sm">{cfg.note}</p>
+      <p className="mx-auto max-w-2xl text-center text-xs text-muted-foreground sm:text-sm">
+        {cfg.note}
+      </p>
 
-      {/* Load current emotes from a channel (Twitch only) */}
-      {platform === "twitch" && (
+      {/* Load current emotes from a channel (Twitch only, needs a configured app) */}
+      {platform === "twitch" && twitchConfigured && (
         <div className="panel p-4">
-          <label className="block space-y-1.5" htmlFor="load-channel">
-            <span className="u-label block">Load current emotes from a channel</span>
-          </label>
-          <div role="group" aria-label="Load emotes from a Twitch channel" className="flex gap-2">
-            <Input
-              id="load-channel"
-              value={channel}
-              onChange={(e) => setChannel(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && !loading && loadFromChannel(channel)}
-              placeholder="your_twitch_name"
-              className="font-mono"
-            />
-            <Button onClick={() => loadFromChannel(channel)} disabled={loading} aria-busy={loading}>
-              {loading ? <Loader2 className="animate-spin" /> : <DownloadCloud />} Load
-            </Button>
+          <div className="flex items-center justify-between gap-2">
+            <label className="block space-y-1.5" htmlFor="load-channel">
+              <span className="u-label block">Load current emotes from a channel</span>
+            </label>
+            {connected && (
+              <Button size="sm" variant="ghost" className="text-xs" onClick={disconnect}>
+                Disconnect Twitch
+              </Button>
+            )}
           </div>
+          {connected ? (
+            <div role="group" aria-label="Load emotes from a Twitch channel" className="flex gap-2">
+              <Input
+                id="load-channel"
+                value={channel}
+                onChange={(e) => setChannel(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && !loading && loadFromChannel(channel)}
+                placeholder="your_twitch_name"
+                className="font-mono"
+              />
+              <Button
+                onClick={() => loadFromChannel(channel)}
+                disabled={loading}
+                aria-busy={loading}
+              >
+                {loading ? <Loader2 className="animate-spin" /> : <DownloadCloud />} Load
+              </Button>
+            </div>
+          ) : (
+            <Button onClick={connectTwitch} className="mt-1">
+              <DownloadCloud /> Connect Twitch to load emotes
+            </Button>
+          )}
           <p className="mt-2 font-mono text-[11px] text-muted-foreground">
-            Pulls your Tier 1 / 2 / 3 sub emotes (static + animated) straight from Twitch — no login.
-            Follower &amp; Bit emotes aren't exposed here; add those by hand.
+            Sign in with your Twitch account, then pull any channel's Tier 1 / 2 / 3 sub emotes
+            (static + animated) via Twitch's official API. Your token stays in this tab only.
           </p>
           {/* Live regions render even when empty so SRs announce load results. */}
           <p role="status" aria-live="polite" className="mt-2 min-h-0 text-xs text-success-text">
             {loading ? "Loading emotes…" : loadError ? "" : loadMsg}
           </p>
-          <p role="alert" aria-live="assertive" className="text-xs text-destructive-text empty:hidden">
+          <p
+            role="alert"
+            aria-live="assertive"
+            className="text-xs text-destructive-text empty:hidden"
+          >
             {loadError}
           </p>
         </div>
@@ -338,13 +495,17 @@ export function Showcase() {
 
       {/* Auto-generated to-do list */}
       {total > 0 && (
-        <TodoList todos={todos} done={done} onToggle={(id) =>
-          setDone((prev) => {
-            const n = new Set(prev);
-            n.has(id) ? n.delete(id) : n.add(id);
-            return n;
-          })
-        } />
+        <TodoList
+          todos={todos}
+          done={done}
+          onToggle={(id) =>
+            setDone((prev) => {
+              const n = new Set(prev);
+              n.has(id) ? n.delete(id) : n.add(id);
+              return n;
+            })
+          }
+        />
       )}
 
       {addError && (
@@ -358,6 +519,7 @@ export function Showcase() {
         {cfg.sections.map((s) => (
           <SectionCard
             key={s.key}
+            platform={platform}
             accent={cfg.accent}
             section={s}
             cap={capOf(s)}
@@ -406,7 +568,7 @@ function StatusBar({
     : `Level ${level} · ${boosts || 0} boost${boosts === 1 ? "" : "s"}`;
   const nextLine = twitch
     ? next
-      ? `Next Tier 1 + animated slot unlocks at ${next} sub points`
+      ? `Next ${next.pools.join(" + ")} slot unlocks at ${next.points} sub points`
       : "All listed slots unlocked"
     : level < 3
       ? `${BOOSTS_FOR_LEVEL[level + 1] - (boosts || 0)} more boosts to reach Level ${level + 1}`
@@ -424,7 +586,10 @@ function StatusBar({
               className="absolute inline-flex size-full animate-ping rounded-full opacity-60"
               style={{ backgroundColor: accent }}
             />
-            <span className="relative inline-flex size-2 rounded-full" style={{ backgroundColor: accent }} />
+            <span
+              className="relative inline-flex size-2 rounded-full"
+              style={{ backgroundColor: accent }}
+            />
           </span>
           <span className="u-label">{twitch ? "Your channel" : "Your server"}</span>
         </div>
@@ -475,10 +640,9 @@ function StatusBar({
             How slots grow
           </summary>
           <p className="mt-2 leading-relaxed">
-            You start with {TWITCH_STATUS[status].start}. Every milestone at{" "}
-            {TWITCH_STATUS[status].milestones.join(" / ")} sub points unlocks one more Tier 1 static
-            slot and one more animated slot — and they stay unlocked. Edit any slot number below to
-            match exactly what your Creator Dashboard shows.
+            You start with {slotStartLine(status)}. The Tier 1 static pool and the animated pool
+            each unlock more slots at their own sub-point milestones — and they stay unlocked. Edit
+            any slot number below to match exactly what your Creator Dashboard shows.
           </p>
         </details>
       )}
@@ -486,7 +650,7 @@ function StatusBar({
   );
 }
 
-function SectionCard({ accent, section, cap, capLocked, onCap, items, onAdd, onRemove }) {
+function SectionCard({ platform, accent, section, cap, capLocked, onCap, items, onAdd, onRemove }) {
   const { isOver, dropHandlers, open, inputProps } = useFileDrop(onAdd);
   const overCap = cap != null && items.length > cap;
 
@@ -494,16 +658,22 @@ function SectionCard({ accent, section, cap, capLocked, onCap, items, onAdd, onR
     <section
       aria-label={section.label}
       {...dropHandlers}
-      className={cn(
-        "panel p-4 transition-colors",
-        isOver && "border-primary bg-primary/5",
-      )}
+      className={cn("panel p-4 transition-colors", isOver && "border-primary bg-primary/5")}
     >
       <div className="mb-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <div className="flex items-center gap-2">
-          <span className="size-2 rounded-full" style={{ backgroundColor: accent }} aria-hidden="true" />
+          <span
+            className="size-2 rounded-full"
+            style={{ backgroundColor: accent }}
+            aria-hidden="true"
+          />
           <h3 className="font-display text-base font-semibold text-foreground">{section.label}</h3>
-          <span className={cn("font-mono text-xs tabular-nums", overCap ? "text-destructive-text" : "text-muted-foreground")}>
+          <span
+            className={cn(
+              "font-mono text-xs tabular-nums",
+              overCap ? "text-destructive-text" : "text-muted-foreground",
+            )}
+          >
             {items.length}
           </span>
           <span className="font-mono text-xs text-muted-foreground">/</span>
@@ -532,7 +702,8 @@ function SectionCard({ accent, section, cap, capLocked, onCap, items, onAdd, onR
       </div>
 
       <p className="mb-3 font-mono text-[11px] text-muted-foreground">
-        {section.spec} · <span className="text-foreground/70">{section.where}</span>
+        {sectionSpec(platform, section)} ·{" "}
+        <span className="text-foreground/70">{section.where}</span>
       </p>
 
       {items.length === 0 ? (
@@ -594,7 +765,9 @@ function Stepper({ label, value, onChange, step = 1 }) {
   const inputId = `stepper-${label.replace(/\s+/g, "-").toLowerCase()}`;
   return (
     <div role="group" aria-labelledby={`${inputId}-label`} className="space-y-1.5">
-      <span id={`${inputId}-label`} className="u-label block">{label}</span>
+      <span id={`${inputId}-label`} className="u-label block">
+        {label}
+      </span>
       <div className="flex items-center rounded-lg bg-muted p-1">
         <button
           type="button"
@@ -633,9 +806,19 @@ function buildTodos(cfg, platform, list, capOf) {
     const n = list(s.key).length;
     const cap = capOf(s);
     if (cap != null && n < cap)
-      todos.push({ id: `add-${s.key}`, kind: "add", text: `Add ${cap - n} more to ${s.label}`, sub: `${n} / ${cap} slots filled` });
+      todos.push({
+        id: `add-${s.key}`,
+        kind: "add",
+        text: `Add ${cap - n} more to ${s.label}`,
+        sub: `${n} / ${cap} slots filled`,
+      });
     if (cap != null && n > cap)
-      todos.push({ id: `del-${s.key}`, kind: "del", text: `Remove ${n - cap} from ${s.label}`, sub: `${n} / ${cap} — over by ${n - cap}` });
+      todos.push({
+        id: `del-${s.key}`,
+        kind: "del",
+        text: `Remove ${n - cap} from ${s.label}`,
+        sub: `${n} / ${cap} — over by ${n - cap}`,
+      });
   }
   // Duplicate names across the whole platform (7TV/BTTV overlap, copy-paste, etc.)
   const names = {};
@@ -643,15 +826,30 @@ function buildTodos(cfg, platform, list, capOf) {
     for (const it of list(s.key)) (names[it.name.toLowerCase()] ??= []).push(s.label);
   for (const [name, where] of Object.entries(names))
     if (where.length > 1)
-      todos.push({ id: `dup-${name}`, kind: "dup", text: `Duplicate name "${name}"`, sub: [...new Set(where)].join(", ") });
+      todos.push({
+        id: `dup-${name}`,
+        kind: "dup",
+        text: `Duplicate name "${name}"`,
+        sub: [...new Set(where)].join(", "),
+      });
   // Off-spec: not square, or over the KB cap (only when we know the byte size).
   for (const s of cfg.sections) {
     const { maxKB, square } = offSpec(platform, s.key);
     for (const it of list(s.key)) {
       if (square && it.img && it.img.naturalWidth !== it.img.naturalHeight)
-        todos.push({ id: `sq-${it.id}`, kind: "spec", text: `${it.name} isn't square`, sub: `${it.img.naturalWidth}×${it.img.naturalHeight} · ${s.label}` });
+        todos.push({
+          id: `sq-${it.id}`,
+          kind: "spec",
+          text: `${it.name} isn't square`,
+          sub: `${it.img.naturalWidth}×${it.img.naturalHeight} · ${s.label}`,
+        });
       if (it.bytes > 0 && it.bytes > maxKB * 1024)
-        todos.push({ id: `kb-${it.id}`, kind: "spec", text: `${it.name} is too big`, sub: `${Math.round(it.bytes / 1024)} KB > ${maxKB} KB · ${s.label}` });
+        todos.push({
+          id: `kb-${it.id}`,
+          kind: "spec",
+          text: `${it.name} is too big`,
+          sub: `${Math.round(it.bytes / 1024)} KB > ${maxKB} KB · ${s.label}`,
+        });
     }
   }
   return todos;
@@ -697,10 +895,14 @@ function TodoList({ todos, done, onToggle }) {
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className={cn("text-sm", checked && "text-muted-foreground line-through")}>
-                    <span className={cn("mr-1.5 font-mono text-[11px] uppercase tracking-wide", k.cls)}>
+                    <span
+                      className={cn("mr-1.5 font-mono text-[11px] uppercase tracking-wide", k.cls)}
+                    >
                       {k.label}
                     </span>
-                    <span className={checked ? "text-muted-foreground" : "text-foreground"}>{t.text}</span>
+                    <span className={checked ? "text-muted-foreground" : "text-foreground"}>
+                      {t.text}
+                    </span>
                   </span>
                   <span className="block font-mono text-[11px] text-muted-foreground">{t.sub}</span>
                 </span>

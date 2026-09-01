@@ -52,9 +52,7 @@ export function ChatPreview({ mode, channel, username, color, badgeUrl, emoteUrl
       </div>
 
       <div className="space-y-1.5 px-3 py-3 text-[13px] leading-relaxed">
-        <p className="px-1 text-[#adadb8]">
-          Welcome to {channel || "mrdemonwolf"}'s chat room!
-        </p>
+        <p className="px-1 text-[#adadb8]">Welcome to {channel || "mrdemonwolf"}'s chat room!</p>
 
         <div className="rounded px-1 py-0.5 hover:bg-white/5">
           <Broadcaster />

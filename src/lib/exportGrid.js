@@ -6,9 +6,14 @@
 // expected to be filtered out by the caller.
 
 import { hexToRgb } from "@/lib/color";
-import { downloadDataUrl } from "@/lib/resize";
+import { canvasToBlob, downloadBlob } from "@/lib/resize";
 
-const W = 1200; // logical px; rendered at 2× for crispness
+// Device-pixel ceilings so a big showcase can't build a canvas that crashes or
+// silently blanks on mobile Safari (~16.7M px area, conservative per-side).
+const EXPORT_MAX_SIDE = 8192;
+const EXPORT_MAX_AREA = 16_000_000;
+
+const W = 1200; // logical px; rendered at up to 2× for crispness
 const M = 48; // outer margin
 const CELL = 104; // tile size
 const GAP = 14;
@@ -44,6 +49,16 @@ function roundRect(ctx, x, y, w, h, r) {
   ctx.roundRect(x, y, w, h, r);
 }
 
+// Truncate `text` with an ellipsis so it never overflows `maxWidth` at the
+// context's current font. Returns the string that fits.
+function fitText(ctx, text, maxWidth) {
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  const ell = "…";
+  let s = String(text);
+  while (s.length > 1 && ctx.measureText(s + ell).width > maxWidth) s = s.slice(0, -1);
+  return s + ell;
+}
+
 function drawContained(ctx, img, cx, cy, box) {
   const iw = img.naturalWidth || img.width;
   const ih = img.naturalHeight || img.height;
@@ -65,11 +80,19 @@ export async function exportShowcase({ title, subtitle, accent, blocks }, filena
   const footerH = 30 + M;
   const H = titleH + live.reduce((sum, b) => sum + sectionH(b), 0) + footerH;
 
-  const dpr = 2;
+  // Pick the highest device-pixel ratio (2 → 1) that keeps the canvas inside the
+  // browser's limits; refuse outright if even 1× is too tall to render.
+  let dpr = 2;
+  while (dpr > 1 && (H * dpr > EXPORT_MAX_SIDE || W * dpr * H * dpr > EXPORT_MAX_AREA)) dpr -= 1;
+  if (H > EXPORT_MAX_SIDE || W * H > EXPORT_MAX_AREA) {
+    throw new Error("This showcase is too large to export — split it into fewer sections.");
+  }
+
   const canvas = document.createElement("canvas");
   canvas.width = W * dpr;
   canvas.height = H * dpr;
   const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Your browser couldn't open a canvas for the export.");
   ctx.scale(dpr, dpr);
   ctx.textBaseline = "alphabetic";
 
@@ -90,20 +113,25 @@ export async function exportShowcase({ title, subtitle, accent, blocks }, filena
   ctx.fill();
   ctx.fillStyle = COL.text;
   ctx.font = '700 40px "Bricolage Grotesque Variable", system-ui, sans-serif';
-  ctx.fillText(title, M + 26, y);
+  ctx.fillText(fitText(ctx, title, W - M - (M + 26)), M + 26, y);
   y += 30;
   ctx.fillStyle = COL.muted;
   ctx.font = '500 18px "JetBrains Mono Variable", ui-monospace, monospace';
-  ctx.fillText(subtitle, M, y);
+  ctx.fillText(fitText(ctx, subtitle, W - 2 * M), M, y);
   y = titleH;
 
   // Sections
   for (const block of live) {
+    const count =
+      block.cap == null ? `${block.items.length}` : `${block.items.length} / ${block.cap}`;
+    // Reserve room for the right-aligned count so a long label can't collide.
+    ctx.font = '500 16px "JetBrains Mono Variable", ui-monospace, monospace';
+    const countW = ctx.measureText(count).width;
+
     ctx.fillStyle = COL.text;
     ctx.font = '600 22px "Bricolage Grotesque Variable", system-ui, sans-serif';
-    ctx.fillText(block.label, M, y + 20);
+    ctx.fillText(fitText(ctx, block.label, W - 2 * M - countW - 16), M, y + 20);
 
-    const count = block.cap == null ? `${block.items.length}` : `${block.items.length} / ${block.cap}`;
     ctx.fillStyle = block.cap != null && block.items.length > block.cap ? COL.over : COL.muted;
     ctx.font = '500 16px "JetBrains Mono Variable", ui-monospace, monospace';
     ctx.textAlign = "right";
@@ -112,7 +140,7 @@ export async function exportShowcase({ title, subtitle, accent, blocks }, filena
 
     ctx.fillStyle = COL.muted;
     ctx.font = '400 13px "JetBrains Mono Variable", ui-monospace, monospace';
-    ctx.fillText(block.spec, M, y + 40);
+    ctx.fillText(fitText(ctx, block.spec, W - 2 * M), M, y + 40);
 
     let gy = y + HEADER_H;
     block.items.forEach((it, i) => {
@@ -135,9 +163,16 @@ export async function exportShowcase({ title, subtitle, accent, blocks }, filena
   // Footer watermark
   ctx.fillStyle = COL.muted;
   ctx.font = '400 13px "JetBrains Mono Variable", ui-monospace, monospace';
-  ctx.fillText("Made with MrDemonWolf Stream Asset Previewer · mrdemonwolf.github.io/stream-asset-preview", M, H - M + 6);
+  ctx.fillText(
+    "Made with MrDemonWolf Stream Asset Previewer · mrdemonwolf.github.io/stream-asset-preview",
+    M,
+    H - M + 6,
+  );
 
-  downloadDataUrl(canvas.toDataURL("image/png"), filename);
+  // toBlob (not toDataURL) so a large PNG isn't materialized as a base64 string;
+  // rejects on a CORS-tainted / oversized canvas so the caller can report it.
+  const blob = await canvasToBlob(canvas, "image/png");
+  downloadBlob(blob, filename);
   return true;
 }
 

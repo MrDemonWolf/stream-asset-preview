@@ -72,7 +72,11 @@ export function DiscordPreview({ kind, url, username }) {
               <p className="break-words">same energy</p>
               {url && (
                 <span className="mt-1 inline-flex items-center gap-1.5 rounded-lg border border-[#4e5058] bg-[#2b2d31] px-2 py-0.5">
-                  <img src={url} alt="Preview: your emoji as a Discord reaction" className="size-4" />
+                  <img
+                    src={url}
+                    alt="Preview: your emoji as a Discord reaction"
+                    className="size-4"
+                  />
                   <span className="text-xs font-semibold text-[#c9cdfb]">3</span>
                 </span>
               )}

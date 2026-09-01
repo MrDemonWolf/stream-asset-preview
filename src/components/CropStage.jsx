@@ -77,7 +77,10 @@ export function CropStage({ img, src, crop, onChange, autoFocus = false }) {
   const c0 = (stagePx - cropSidePx) / 2; // crop window top-left in stage px
 
   // Slider position (0 = zoomed out / whole image, 1 = tight) mapped in log space.
-  const zoomT = 1 - logNorm(crop.size, minSize, maxSize);
+  // A degenerate source (min === max, e.g. a 1–4px image) has no zoom range, so
+  // guard the log math against a divide-by-zero NaN and disable the control.
+  const zoomDisabled = !(maxSize > minSize);
+  const zoomT = zoomDisabled ? 0 : 1 - logNorm(crop.size, minSize, maxSize);
   function onZoomSlider(t) {
     const size = logLerp(minSize, maxSize, 1 - t);
     update((prev) => recenter(prev, size));
@@ -87,7 +90,12 @@ export function CropStage({ img, src, crop, onChange, autoFocus = false }) {
   // zoom. Step is ~6% of the frame so it scales with the current zoom.
   function onKeyDown(e) {
     const step = Math.max(1, crop.size * PAN_STEP);
-    const pan = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+    const pan = {
+      ArrowLeft: [-step, 0],
+      ArrowRight: [step, 0],
+      ArrowUp: [0, -step],
+      ArrowDown: [0, step],
+    };
     if (pan[e.key]) {
       e.preventDefault();
       const [dx, dy] = pan[e.key];
@@ -111,11 +119,14 @@ export function CropStage({ img, src, crop, onChange, autoFocus = false }) {
     drag.current = { x: e.clientX, y: e.clientY };
   }
   function onPointerMove(e) {
-    if (!drag.current) return;
+    // Ignore until the stage has been measured (k would be 0 → Infinity deltas).
+    if (!drag.current || stagePx <= 0) return;
     const dx = (e.clientX - drag.current.x) / k; // stage px → source px
     const dy = (e.clientY - drag.current.y) / k;
     drag.current = { x: e.clientX, y: e.clientY };
-    commit({ ...crop, x: crop.x - dx, y: crop.y - dy });
+    // Functional update reads the LATEST crop, so several move events landing in
+    // one frame accumulate instead of collapsing against a stale render closure.
+    update((prev) => ({ ...prev, x: prev.x - dx, y: prev.y - dy }));
   }
   function onPointerUp(e) {
     if (drag.current) e.currentTarget.releasePointerCapture(e.pointerId);
@@ -134,7 +145,9 @@ export function CropStage({ img, src, crop, onChange, autoFocus = false }) {
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
-        role="application"
+        // No role="application" — it suppresses screen-reader browse mode. This
+        // is a focusable group with a documented keyboard model + live readout.
+        role="group"
         aria-label="Crop editor — drag or arrow keys to move, scroll or +/− to zoom"
         aria-describedby={statusId}
         className="checker relative mx-auto aspect-square w-full max-w-[380px] cursor-grab touch-none select-none overflow-hidden rounded-xl border border-border outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing"
@@ -186,8 +199,8 @@ export function CropStage({ img, src, crop, onChange, autoFocus = false }) {
       </div>
 
       <p className="text-center text-xs text-muted-foreground">
-        <span className="font-medium text-foreground">Bright keeps</span> · dimmed
-        gets cropped · drag or arrow keys to move, scroll or +/− to zoom
+        <span className="font-medium text-foreground">Bright keeps</span> · dimmed gets cropped ·
+        drag or arrow keys to move, scroll or +/− to zoom
       </p>
       <p id={statusId} aria-live="polite" aria-atomic="true" className="sr-only">
         {framing}
@@ -203,6 +216,7 @@ export function CropStage({ img, src, crop, onChange, autoFocus = false }) {
           max={1}
           step={0.001}
           value={zoomT}
+          disabled={zoomDisabled}
           onChange={(e) => onZoomSlider(Number(e.target.value))}
           aria-label="Zoom"
           aria-valuetext={`${Math.round(crop.size)} source pixels`}
@@ -221,7 +235,9 @@ export function CropStage({ img, src, crop, onChange, autoFocus = false }) {
         <Button
           size="sm"
           variant="ghost"
-          onClick={() => commit({ x: (natW - crop.size) / 2, y: (natH - crop.size) / 2, size: crop.size })}
+          onClick={() =>
+            commit({ x: (natW - crop.size) / 2, y: (natH - crop.size) / 2, size: crop.size })
+          }
         >
           <RotateCcw /> Center
         </Button>
