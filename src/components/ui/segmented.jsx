@@ -9,7 +9,15 @@ import { cn } from "@/lib/utils";
 //   options: [key, label][]   value: key   onChange(key)
 //   label:   accessible group name (always set)
 //   showLabel: render a visible console caption above the track
-export function Segmented({ label, showLabel = false, value, options, onChange, className, size = "default" }) {
+export function Segmented({
+  label,
+  showLabel = false,
+  value,
+  options,
+  onChange,
+  className,
+  size = "default",
+}) {
   const groupId = useId();
   const refs = useRef([]);
 
@@ -18,7 +26,10 @@ export function Segmented({ label, showLabel = false, value, options, onChange, 
       ? "min-h-12 px-6 text-sm font-semibold sm:min-h-11 sm:text-base"
       : "min-h-11 px-4 text-sm font-medium sm:min-h-8";
 
-  const idx = Math.max(0, options.findIndex(([k]) => k === value));
+  const idx = Math.max(
+    0,
+    options.findIndex(([k]) => k === value),
+  );
 
   function move(to) {
     const n = options.length;

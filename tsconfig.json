@@ -1,0 +1,23 @@
+{
+  // Type-checking gate (no emit). We keep the JS/JSX stack — this runs `tsc` in
+  // checkJs mode over the pure logic modules in src/lib, where types catch real
+  // bugs, rather than fighting untyped JSX. JSDoc annotations in those files are
+  // honored. Editors still use jsconfig.json for the @ alias.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"],
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": false,
+    "noImplicitAny": false,
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": { "@/*": ["./src/*"] }
+  },
+  "include": ["src/lib/**/*.js"],
+  "exclude": ["src/lib/**/*.test.js", "node_modules", "dist"]
+}

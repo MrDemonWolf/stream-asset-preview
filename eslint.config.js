@@ -50,4 +50,15 @@ export default [
     files: ["src/**/*.test.{js,jsx}"],
     languageOptions: { globals: { ...globals.node } },
   },
+
+  // Playwright e2e specs — node runner, but page.evaluate callbacks reference
+  // browser globals, so allow both.
+  {
+    files: ["e2e/**/*.{js,jsx}"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "module",
+      globals: { ...globals.node, ...globals.browser },
+    },
+  },
 ];
